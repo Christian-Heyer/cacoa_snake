@@ -1,0 +1,3 @@
+# Small snakemake pipeline to run cacoa
+
+run cacoa from snakemake for sc projects
