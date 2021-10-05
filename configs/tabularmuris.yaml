@@ -1,0 +1,6 @@
+######
+# Config file for sc cacoa scripts
+#
+
+BASE_FP: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq"
+DATASET: "TabularMuris"

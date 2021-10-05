@@ -1,0 +1,4 @@
+logs
+.snakemake
+*.log
+.ipynb_checkpoints
