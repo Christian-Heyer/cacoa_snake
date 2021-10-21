@@ -1,0 +1,7 @@
+name: anndata
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - anndata
+  - loompy

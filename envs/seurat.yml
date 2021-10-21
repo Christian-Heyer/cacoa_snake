@@ -1,0 +1,12 @@
+name: seurat
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - r
+  - r-seurat
+  - r-reticulate
+  - r-devtools
+  - r-vroom
+  - r-readr
+  - bioconductor-geoquery
