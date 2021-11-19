@@ -8,7 +8,7 @@ if (exists("snakemake")) {
     counts_file <- snakemake@input[["counts"]]
     metadata_file <- snakemake@input[["metadata"]]
     genes_file <- snakemake@input[["genes"]]
-    patient_data <- snakemake@input[["patient_data"]]
+    patient_data <- snakemake@params[["patient_data"]]
     GSE_id <- snakemake@params[["geo_data"]]
     GEO_data <- snakemake@config[["download_link"]][["GEO"]]
     seurat_path <- snakemake@output[["seurat_path"]]
@@ -39,7 +39,7 @@ meta_frame_comb$Manuscript_Identity %>% str_replace(pattern = "^VE_.*", replacem
 seurat_obj <- CreateSeuratObject(count_mtx, project = "HumanLung", assay = "RNA", meta.data = meta_frame_comb)
 rm(count_mtx)
 gc()
-seurat_obj <- seurat_obj[, seurat_obj$Disease_Identity == "Control"]
+seurat_obj <- seurat_obj[, seurat_obj$Disease_Identity == "Control" & seurat_obj$Subject_Identity %in% age_test$Subject_ID]
 
 #seurat_obj@meta.data <- 
 seurat_obj[["percent.mt"]] <- PercentageFeatureSet(seurat_obj, pattern = "^MT-")

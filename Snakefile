@@ -17,60 +17,61 @@ rule all:
         expand(join(BASE_FP, "{dataset}", "report", "{dataset}" + "_cacoa.r.html"), 
             dataset = DATASET)
 
-rule get_h5ad_file:
-    output:
-        h5ad = temp(join(BASE_FP, "{dataset}", "{dataset}_raw." + config["download_link"]["f_type"]))
-    params:
-        link = config["download_link"]["link"]
-    shell:
-        """
-        wget -O {output.h5ad} {params.link}
-        """
-rule anndata_to_loom:
-    input:
-        h5ad = join(BASE_FP, "{dataset}", "{dataset}_raw." + config["download_link"]["f_type"])
-    output:
-        #temp(dir(join(BASE_FP, "{dataset}", "{dataset}_raw"))), 
-        counts = join(BASE_FP, "{dataset}", "{dataset}_raw", "X.csv"),
-        cell_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "obs.csv"),
-        gene_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "var.csv")
-    params:
-        out_dir = join(BASE_FP, "{dataset}", "{dataset}_raw")
-    resources:
-        mem_mb=2048*8
-    conda:
-        "envs/anndata.yml"
-    script:
-        "anndata2loom.py" 
+if config["download_link"]["f_type"] == "h5ad":
+    rule get_h5ad_file:
+        output:
+            h5ad = temp(join(BASE_FP, "{dataset}", "{dataset}_raw." + config["download_link"]["f_type"]))
+        params:
+            link = config["download_link"]["link"]
+        shell:
+            """
+            wget -O {output.h5ad} {params.link}
+            """
+    rule anndata_to_loom:
+        input:
+            h5ad = join(BASE_FP, "{dataset}", "{dataset}_raw." + config["download_link"]["f_type"])
+        output:
+            #temp(dir(join(BASE_FP, "{dataset}", "{dataset}_raw"))), 
+            counts = join(BASE_FP, "{dataset}", "{dataset}_raw", "X.csv"),
+            cell_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "obs.csv"),
+            gene_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "var.csv")
+        params:
+            out_dir = join(BASE_FP, "{dataset}", "{dataset}_raw")
+        resources:
+            mem_mb=2048*8
+        conda:
+            "envs/anndata.yml"
+        script:
+            "anndata2loom.py" 
         
-rule create_seurat_and_process:
-    input:
-        counts = join(BASE_FP, "{dataset}", "{dataset}_raw", "X.csv"),
-        cell_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "obs.csv"),
-        gene_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "var.csv"),
-    output:
-        #convert_seurat  =  temp(join(BASE_FP, "{dataset}", "{dataset}_raw.h5seurat")), 
-        seurat_path = join(BASE_FP, "{dataset}", "seurat_obj.RDS.gz")
-    params:
-        f_type = config["download_link"]["f_type"]
-    conda:  
-        "envs/seurat.yml"
-    resources:
-        mem_mb = 96000
-    threads: 8
-    script:
-        "seurat.R"
+    rule create_seurat_and_process:
+        input:
+            counts = join(BASE_FP, "{dataset}", "{dataset}_raw", "X.csv"),
+            cell_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "obs.csv"),
+            gene_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "var.csv"),
+        output:
+            #convert_seurat  =  temp(join(BASE_FP, "{dataset}", "{dataset}_raw.h5seurat")), 
+            seurat_path = join(BASE_FP, "{dataset}", "seurat_obj.RDS.gz")
+        params:
+            f_type = config["download_link"]["f_type"]
+        conda:  
+            "envs/seurat.yml"
+        resources:
+            mem_mb = 96000
+        threads: 8
+        script:
+            "seurat.R"
 
-if config["download_link"]["GEO"]:
+if config["download_link"]["f_type"] == "GEO":
     rule get_seurat_from_GEO:
         input:
             counts = HTTP.remote(config["download_link"]["GEO"]["counts"]),
             metadata = HTTP.remote(config["download_link"]["GEO"]["metadata"]),
-            genes = HTTP.remote(config["download_link"]["GEO"]["genes"]),
-            patient_data = "data/Adams_meta_data.txt"
+            genes = HTTP.remote(config["download_link"]["GEO"]["genes"])
         output:
             seurat_path = join(BASE_FP, "{dataset}", "seurat_obj.RDS.gz")
         params:
+            patient_data = config["external_metadata"], 
             geo_data = config["download_link"]["GEO"]
         conda:
             "envs/seurat.yml"
@@ -81,7 +82,7 @@ if config["download_link"]["GEO"]:
         script:
             "seurat_from_geo.R" 
     
-    ruleorder: get_seurat_from_GEO > create_seurat_and_process
+  #  ruleorder: get_seurat_from_GEO > create_seurat_and_process
 
 
 rule create_cacoa:
@@ -111,7 +112,7 @@ rule run_cacoa_analysis:
         "envs/cacoa.yml"
     threads: 8
     resources:
-        mem_mb = 32000,
+        mem_mb = 170000,
         time_min = "04:59",
         queue = "long"
     log:

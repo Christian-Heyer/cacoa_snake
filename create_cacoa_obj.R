@@ -17,13 +17,12 @@ if(exists("snakemake")) {
     output_p <- snakemake@output[["cacoa_obj"]]
     permute <- snakemake@params[["permute"]]
     plan("multicore", workers = snakemake@threads)
-    plan()
 
     cacoa_opts <- snakemake@config[["cacoa_opts"]]
 } else {
     base_fp = "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/adams_et_al/"
     seurat_path = file.path(base_fp, "seurat_obj.RDS.gz")
-    output_p = file.path(base_fp, "cacoa_obj.rds.gz")
+    output_p = file.path(base_fp, "cao_obj.rds.gz")
     config <- yaml::read_yaml("/desktop-home/heyer/projects/Vascular_Aging/RNAseq/scRNAseq_scripts/configs/human_lung.yaml")
     cacoa_opts <- config$cacoa_opts
     permute <- F
@@ -41,7 +40,7 @@ create_cao_from_seurat <- function(s_path = seurat_path, do_permute = permute) {
     #seurat_obj <- RunUMAP(seurat_obj, dims = 1:30)
     #options(warn=0)
     seurat_obj<- SetIdent(seurat_obj, value = cacoa_opts[["Ident"]])
-    
+     
     if (cacoa_opts[["regroup_age"]]) {
         if(snakemake@config[["organism"]] == "mm") {
             seurat_obj$binary_age <- ifelse(seurat_obj$age %in% c("1m", "3m"),
@@ -51,6 +50,7 @@ create_cao_from_seurat <- function(s_path = seurat_path, do_permute = permute) {
             seurat_obj$binary_age <- ifelse(seurat_obj$Age < 47,
                                     "young", 
                                     "old")
+            seurat_obj$Subject_Identity<- paste0(seurat_obj$Subject_Identity, "_", seurat_obj$Age)
         }
     } else {
         seurat_obj$binary_age <- seurat_obj$age
@@ -72,6 +72,7 @@ create_cao_from_seurat <- function(s_path = seurat_path, do_permute = permute) {
         mouse_vec <- setNames(mouse_meta$binary_age, nm= dplyr::pull(mouse_meta, !!cacoa_opts$id_field))
     }
     # Create object and set coloring
+    print(unique(mouse_vec))
     yeetme <- Cacoa$new(seurat_obj,ref.level = "old", 
                         target.level ="young", 
                         sample.groups= mouse_vec, 

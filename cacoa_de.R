@@ -14,7 +14,7 @@ if (exists("snakemake")) {
 } else {
     threads <- 2
 
-    base_fp = "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/adams_et_al//"
+      base_fp = "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/adams_et_al/"
     cao_path <- file.path(base_fp, "cao_obj.RDS.gz")
     cao_output <- file.path(base_fp, "processed_cao.RDS.gz")
 }
@@ -29,22 +29,23 @@ cao$n.cores <- threads
 
 cao$estimateCellLoadings()
 cao$estimateCellDensity()
-cao_obj$estimateCellDensity(method='graph', name='cell.density.graph',)
+cao$estimateCellDensity(method='graph', name='cell.density.graph',)
 
 cao$estimateDiffCellDensity(type='permutation', verbose=FALSE)
-cao_obj$estimateDiffCellDensity(type='permutation', verbose=FALSE, name='cell.density.graph')
-cao$estimateExpressionShiftMagnitudes(min.cells.per.sample=10, dist="cor")
+cao$estimateDiffCellDensity(type='permutation', verbose=FALSE, name='cell.density.graph')
+cao$estimateExpressionShiftMagnitudes(min.cells.per.sample=10, 
+n.cores = threads, n.permutations = 2500, top.n.genes = 3000)
 
 cao$estimateCommonExpressionShiftMagnitudes(n.cores = threads)
 
-cao$estimateClusterFreeDE(min.expr.frac=0.01)
-exc.genes <- cao_obj$test.results$cluster.free.z %>%  colnames() %>%
-  .[grepl("Mt-", .)] %>% c("Malat1")
-cao_obj$smoothClusterFreeZScores(n.top.genes=1000, progress.chunks=10, excluded.genes=exc.genes)
-cao$estimateGenePrograms(n.programs=10)
+cao$estimateClusterFreeDE(min.expr.frac=0.01, n.top.genes = 6000)
+exc.genes <- cao$test.results$cluster.free.z %>%  colnames() %>%
+  .[grepl("Mt-",x = ., ignore.case = TRUE)] %>% c("Malat1")
+cao$smoothClusterFreeZScores(n.top.genes=1000, excluded.genes=exc.genes)
 
-cao$estimateClusterFreeExpressionShifts(n.top.genes=3000)
+cao$estimateClusterFreeExpressionShifts(n.top.genes=3000, n.permutations = 2500)
         
+cao$estimateGenePrograms(n.programs=10, n.top.genes = 3000)
 ## Estimate DE
 
 cao$estimateDEPerCellType(independent.filtering=TRUE, name = "de.Wald", 
@@ -63,7 +64,7 @@ cao$estimateDEPerCellType(name='de.loo', resampling.method='loo', n.resamplings 
 
 
 estimateAllStabs <- function(cao_obj, de_n) {
-    cao_obj$estimateDEStabilityPerCellType(top.n.genes = 300, de.name = de_n, 
+    cao_obj$estimateDEStabilityPerCellType(top.n.genes = 900, de.name = de_n, 
                                      name = paste0(de_n,'_stab.fix'))
 
     cao_obj$estimateDEStabilityTrend(de.name = de_n, name = paste0(de_n, "_trend"),
