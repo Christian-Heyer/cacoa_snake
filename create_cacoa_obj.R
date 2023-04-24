@@ -3,10 +3,12 @@ library(magrittr)
 library(dplyr)
 library(future)
 
-
 if(!require("cacoa")) {
-    install.packages("coda.base", repos =  "https://cloud.r-project.org")
-    devtools::install_github("kharchenkolab/cacoa", ref = "dev", upgrade = "never")
+  install.packages("coda.base", repos =  "https://cloud.r-project.org")
+  #devtools::install_github("kharchenkolab/sccore", ref = "dev")
+  devtools::install_github("kharchenkolab/sccore", ref = "32a8f52", upgrade = "never")
+  devtools::install_github("kharchenkolab/cacoa", ref = "be2a38d", upgrade = "never")
+  
 }
 
 library(cacoa)
@@ -20,10 +22,10 @@ if(exists("snakemake")) {
 
     cacoa_opts <- snakemake@config[["cacoa_opts"]]
 } else {
-    base_fp = "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/adams_et_al/"
+    base_fp = "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/TabularMuris_nonmyeloid_brain/"
     seurat_path = file.path(base_fp, "seurat_obj.RDS.gz")
     output_p = file.path(base_fp, "cao_obj.rds.gz")
-    config <- yaml::read_yaml("/desktop-home/heyer/projects/Vascular_Aging/RNAseq/scRNAseq_scripts/configs/human_lung.yaml")
+    config <- yaml::read_yaml("/desktop-home/heyer/projects/Vascular_Aging/RNAseq/scRNAseq_scripts/configs/tabula_muris_brain.yaml")
     cacoa_opts <- config$cacoa_opts
     permute <- F
 }
@@ -33,7 +35,7 @@ create_cao_from_seurat <- function(s_path = seurat_path, do_permute = permute) {
     # Run standard Seurat processing
     seurat_obj <- readRDS(seurat_path)
     #seurat_obj <- SCTransform(seurat_obj,verbose = F)
-
+    seurat_obj@assays$SCT@counts <- seurat_obj@assays$SCT@counts
     #seurat_obj <- RunPCA(seurat_obj, 
      #                    features = VariableFeatures(object = seurat_obj))
     #seurat_obj <- FindNeighbors(seurat_obj, features = VariableFeatures(object = seurat_obj))
@@ -45,11 +47,11 @@ create_cao_from_seurat <- function(s_path = seurat_path, do_permute = permute) {
         if(snakemake@config[["organism"]] == "mm") {
             seurat_obj$binary_age <- ifelse(seurat_obj$age %in% c("1m", "3m"),
                                     "young", 
-                                    "old")
+                                    "aged")
         } else {
             seurat_obj$binary_age <- ifelse(seurat_obj$Age < 47,
                                     "young", 
-                                    "old")
+                                    "aged")
             seurat_obj$Subject_Identity<- paste0(seurat_obj$Subject_Identity, "_", seurat_obj$Age)
         }
     } else {
@@ -66,15 +68,15 @@ create_cao_from_seurat <- function(s_path = seurat_path, do_permute = permute) {
     s_per_cell <- setNames(dplyr::pull(meta_meta, !!cacoa_opts$id_field), nm = rownames(meta_meta))
     mouse_meta <- meta_meta %>% unique()
     if (do_permute) {
-        mouse_vec <- setNames(sample(c("young", "old"), 
+        mouse_vec <- setNames(sample(c("young", "aged"), 
                          size = nrow(mouse_meta), replace = T), nm = dplyr::pull(mouse_meta, !!cacoa_opts$id_field))
     } else {
         mouse_vec <- setNames(mouse_meta$binary_age, nm= dplyr::pull(mouse_meta, !!cacoa_opts$id_field))
     }
     # Create object and set coloring
     print(unique(mouse_vec))
-    yeetme <- Cacoa$new(seurat_obj,ref.level = "old", 
-                        target.level ="young", 
+    yeetme <- Cacoa$new(seurat_obj, target.level = "aged", 
+                        ref.level ="young", 
                         sample.groups= mouse_vec, 
                         sample.per.cell =s_per_cell, graph.name = "UMAP")
     yeetme$cell.groups.palette<- levels(yeetme$cell.groups) %>%  

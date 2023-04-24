@@ -3,13 +3,11 @@
 #
 
 BASE_FP: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq"
-DATASET: "TabularMuris"
-FILENAME: "senis_droplet_lung"
-
-save_plots: True
+DATASET: "Mouse_lung"
+FILENAME: "kimmel_lung"
 
 download_link: 
-  link: "https://figshare.com/ndownloader/files/15467792"
+  link: "https://storage.googleapis.com/calico-website-mca-storage/lung.h5ad"
   f_type: "h5ad"
   GEO: ""
 
@@ -18,5 +16,5 @@ organism: "mm"
 cacoa_opts:
   id_field: "mouse.id"
   age_field: "age"
-  Ident: "cell_ontology_class"
-  regroup_age: True
+  Ident: "cell_type"
+  regroup_age: False

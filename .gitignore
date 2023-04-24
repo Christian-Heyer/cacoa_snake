@@ -2,3 +2,5 @@ logs
 .snakemake
 *.log
 .ipynb_checkpoints
+.Rhistory
+.Rbuildignore

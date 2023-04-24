@@ -67,12 +67,12 @@ if config["download_link"]["f_type"] == "GEO":
         input:
             counts = HTTP.remote(config["download_link"]["GEO"]["counts"]),
             metadata = HTTP.remote(config["download_link"]["GEO"]["metadata"]),
-            genes = HTTP.remote(config["download_link"]["GEO"]["genes"])
         output:
             seurat_path = join(BASE_FP, "{dataset}", "seurat_obj.RDS.gz")
         params:
             patient_data = config["external_metadata"], 
-            geo_data = config["download_link"]["GEO"]
+            geo_data = config["download_link"]["GEO"],
+            genes = HTTP.remote(config["download_link"]["GEO"]["genes"])
         conda:
             "envs/seurat.yml"
         resources:
@@ -97,7 +97,7 @@ rule create_cacoa:
     threads: 4
     resources:
         mem_mb = 24000,
-        time_min = "00:59"
+        time_min = 59
     log:
         "logs/crate_cacoa/{dataset}_create_cacoa.log"
     script:
@@ -110,7 +110,7 @@ rule run_cacoa_analysis:
         cacoa_processed =  join(BASE_FP, "{dataset}", "processed_cao.RDS.gz")
     conda:
         "envs/cacoa.yml"
-    threads: 8
+    threads: 16
     resources:
         mem_mb = 170000,
         time_min = "04:59",
@@ -126,15 +126,15 @@ rule plot_report:
     output:
         report_html = join(BASE_FP, "{dataset}", "report", "{dataset}" + "_cacoa.r.ipynb")
     params:
-        permute = False
+        permute = False,
+        save_plots = True
     conda:
         "envs/cacoa.yml"
     log:
-        "logs/render_report/{dataset}_render_report.log",
         notebook=join(BASE_FP, "{dataset}", "report", "{dataset}" + "_cacoa.r.ipynb")
     resources:
         mem_mb = 192000,
-        walltime = "04:59" 
+        walltime = "09:59" 
     threads: 4
     notebook:
         "cacoa_report.r.ipynb"
@@ -152,4 +152,3 @@ rule export_report:
         """
             jupyter nbconvert --to html {input.report_notebook} 
         """
-

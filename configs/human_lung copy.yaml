@@ -1,0 +1,23 @@
+
+BASE_FP: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq"
+DATASET: "adams_et_al_wo_outlier"
+FILENAME: "senis_droplet_lung"
+
+download_link: 
+  link: ""
+  f_type: "GEO"
+  GEO: 
+    ID: "GSE136831"
+    counts: ftp.ncbi.nlm.nih.gov/geo/series/GSE136nnn/GSE136831/suppl//GSE136831_RawCounts_Sparse.mtx.gz
+    genes: ftp.ncbi.nlm.nih.gov/geo/series/GSE136nnn/GSE136831/suppl//GSE136831_AllCells.GeneIDs.txt.gz
+    metadata: ftp.ncbi.nlm.nih.gov/geo/series/GSE136nnn/GSE136831/suppl//GSE136831_AllCells.Samples.CellType.MetadataTable.txt.gz
+
+external_metadata:  "data/Adams_meta_data_wo_outlier.txt"
+
+organism: "hs"
+
+cacoa_opts:
+  id_field: "Subject_Identity"
+  age_field: "Age"
+  Ident: "Manuscript_Identity"
+  regroup_age: True

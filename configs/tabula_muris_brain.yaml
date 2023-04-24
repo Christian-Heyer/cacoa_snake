@@ -3,13 +3,12 @@
 #
 
 BASE_FP: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq"
-DATASET: "TabularMuris"
-FILENAME: "senis_droplet_lung"
+DATASET: "TabularMuris_nonmyeloid_brain"
+FILENAME: "senis_facs_brain"
 
-save_plots: True
 
 download_link: 
-  link: "https://figshare.com/ndownloader/files/15467792"
+  link: "https://figshare.com/ndownloader/files/23872787"
   f_type: "h5ad"
   GEO: ""
 

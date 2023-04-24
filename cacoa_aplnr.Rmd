@@ -1,0 +1,209 @@
+---
+title: "Apln/r analysis"
+author: "Christian Heyer"
+date: "12/9/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(cacoa)
+library(DESeq2)
+library(magrittr)
+library(ggplot2)
+library(tidyverse)
+library(ggsignif)
+library(patchwork)
+if (exists("snakemake")) {
+    cao_path <- snakemake@input[["cacoa_obj"]]
+    cao_output <- snakemake@output[["cacoa_processed"]]
+    threads <- snakemake@threads
+} else {
+    threads <- 2
+
+      base_fp = "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/TabularMuris/"
+    cao_path <- file.path(base_fp, "cao_obj.RDS.gz")
+    cao_output <- file.path(base_fp, "processed_cao.RDS.gz")
+      group_colors <- list( young = "#FC8D59",
+      old = "#A0A0A4")
+      plot_dir <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/TabularMuris/plots"
+  if(!dir.exists(plot_dir)) {
+    dir.create(plot_dir)
+  }
+}
+
+cao_obj <- readRDS(cao_output)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+cell_types <- names(cao_obj$test.results$de.Wald)
+extract_pseudobulk <- function(cell_type, c_obj) {
+  test_cm <- cao_obj$test.results$de.Wald[[cell_type]]$cm
+  test_meta <- cao_obj$test.results$de.Wald[[cell_type]]$meta
+  yeet <- DESeqDataSetFromMatrix(test_cm, colData = test_meta, design = ~group)
+  yeet <- DESeq(yeet)
+  yeet
+}
+biggus_yeetus <- purrr::map(cell_types, extract_pseudobulk, cao_obj)
+names(biggus_yeetus) <- cell_types
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE, fig.width = 8, fig.cap="Boxplot of normalized counts from deseq2 normalized pseudobulk of cell types comparing young and aged samples. P-values shown are BH adjusted p-values calculated using DESeq2 on the pseudobulked data"}
+plot_gene_bar <- function(deseq_obj, gene_id, cell_type) {
+  plot_data <- DESeq2::plotCounts(deseq_obj, normalized = T,gene = gene_id,intgroup = "group",returnData = T) %>%
+      dplyr::filter(!is.na(group)) %>% mutate(group = fct_relevel(group, "young"))
+    gene_pval <-results(deseq_obj)[gene_id,]$padj
+      ohno <- ggplot(plot_data,aes(x = group, fill = group, y = count )) + geom_boxplot() + 
+        geom_jitter(width = 0.2) + theme_bw() + scale_fill_manual(values = group_colors,
+                                                                  labels = c("old" = "aged",
+                                                                                  "young"= "young")) +
+        geom_signif(comparisons = list(c("old" , "young")), annotations = c(format.pval(gene_pval, digits = 2))  ) +
+        ylab("normalized counts") + labs(caption = cell_type) + ggtitle(glue::glue("{gene_id}")) 
+      ohno
+}
+
+all_plots <- list()
+for(c_g in cell_types) {
+  yeet <- biggus_yeetus[[c_g]]
+  plots <- list()
+  if ("Aplnr" %in% rownames(yeet)) {
+    plots[["aplnr"]] <- plot_gene_bar(yeet, "Aplnr", c_g)
+  }
+  if("Apln" %in% rownames(yeet)) {
+    plots[["apln"]] <- plot_gene_bar(yeet, "Apln", c_g) 
+  }
+  if("Cd74" %in% rownames(yeet)) {
+    plots[["cd74"]] <- plot_gene_bar(yeet, "Cd74", c_g)
+  }
+  wrap_plots(plots,ncol = 3) %>% plot()
+  all_plots[[c_g]] <- plots
+  purrr::map2(plots, names(plots),  function(x,y) {
+    ggsave(filename = file.path(plot_dir, glue::glue("{c_g}_{y}_barplot.svg")), plot = x + ggtitle(""), width = 4, height =6)
+  })
+}
+```
+
+```{}
+all_plots
+
+```
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+```{r, eval = F}
+calculate_pc_expression <- function(group_id, group_name, seurat_obj, feature = "Aplnr") {
+  data_mat <- seurat_obj[,seurat_obj@meta.data[,group_name] == group_id]@assays[[seurat_obj@active.assay]]@data
+  which(data_mat[feature,] > 0 ) %>% length() /nrow(data_mat)
+}
+
+pct_expression_per_group <- function(seurat_obj, feature, split.by = NULL, group.by = "NULL") {
+  if (!is.null(split.by)) {
+    groups <- seurat_obj@meta.data[,split.by] %>% unique()
+  } else {
+    groups <- "all"
+  }
+  if (!is.null(group.by)) {
+    cell_types <- seurat_obj@meta.data[,group.by] %>% unique()
+  } else {
+    cell_types <- "all"
+  }
+  
+
+  results_obj <- list()
+  for (c_t in cell_types) {
+    if (!is.null(group.by)) {
+      cell_seurat <- seurat_obj[,seurat_obj@meta.data[,group.by] == cell_types]
+    } else {
+      cell_seurat <- NULL
+    }
+    results_obj[[c_t]]<- purrr::map(groups, calculate_pc_expression, group_name = split.by, 
+               seurat_obj = seurat_obj, feature = feature)
+  }
+}
+
+```
+
+```{r}
+sample <- cao_obj$data.object
+sample$cell <- NULL
+p <- SCpubr::do_BoxPlot(sample = sample[,sample@meta.data$cell_ontology_class == "endothelial cell"],
+feature = "Aplnr", group.by = "binary_age",assay = "RNA",use_test = T,comparisons = list(c("old","young")))
+ggsave("aplnr_boxplot.svg",p,  path = plot_dir, width =7, height = 8)
+p
+```
+
+```{r, fig.cap = "percentage expression of Aplnr across cell types comparing young and aged samples" }
+DotPlot(sample, features = "Aplnr",split.by = "binary_age") -> yeetus
+yeetus$data -> pct_expression_data
+pct_expression_data$age <- str_extract(pct_expression_data$id,"[a-zA-Z]*$")
+pct_expression <- ggplot(pct_expression_data, aes(x = id, y = pct.exp, fill = age)) + geom_col() +
+  scale_x_discrete(guide = guide_axis(angle = 90)) + scale_fill_manual(values = c("old" = "#A0A0A4",
+                                                                                  "young" = "#FC8D59"),
+                                                                       labels = c("old" = "aged",
+                                                                                  "young"= "young"),
+                                                                       breaks=c("young", "old")) +
+  theme_bw() + ylab("Aplnr pct.exp")
+
+ggsave(filename = "pct_expression_aplnr.svg",pct_expression, path = plot_dir, width =7, height = 8)
+pct_expression
+```
+
+
+```{r}
+res <- cao_obj$test.results$de.loo$`endothelial cell`$res
+
+gsea_in <- data.frame(gene_id = res$Gene, LFC = res$stat)
+
+x<- RNAscripts::run_msig_enricher(list(gsea_in), category = "H")
+
+ec_enrich <- RNAscripts::plot_enrichment(x[[1]], X = "ID", Y = "NES", pval = "p.adjust")
+dp <- better_dotplot(x[[1]],c_groups =  c("aged_ec", "young_ec"))
+purrr::map2(dp, c("aged_ec", "young_ec"), save_dotplots, gsea_type = "msigdb", p_path = plot_dir)
+
+dp
+ggsave("Hallmark_dp.svg",ec_enrich, path = plot_dir, height = 8, width = 8)
+```
+
+```{r}
+library(cacoa)
+run_gsea_cao <- function(cao) {
+  gsea_data <- purrr::map(cao$test.results$de.loo, function(obj) {
+    tibble(gene = obj$res$Gene,
+           scores = obj$res$stat) %>% dplyr::arrange(desc(scores)) 
+  })
+  RNAscripts::run_msig_enricher(gsea_data, category = "H")
+}
+gsea_res <- run_gsea_cao(cao_obj)
+```
+
+
+```{r, fig.height = 8, fig.width = 9}
+pull_NES_values <- function(gsea_result) {
+  result_frame <- gsea_result@result
+  purrr::set_names(result_frame$NES, nm = rownames(result_frame))
+}
+plot_data <- purrr::map_df(gsea_res, pull_NES_values, .id="cell_type")
+plot_data %>% pivot_longer(cols = -c("cell_type"), names_to = "gene_set", values_to = "NES")  %>% 
+  replace(is.na(.),0) -> plot_data_long
+
+
+plot_data_long |> tidyHeatmap::heatmap(gene_set, cell_type, NES,
+                                       palette_value = circlize::colorRamp2(breaks = c(min(plot_data_long$NES),0,max(plot_data_long$NES)),
+                                                                            colors = c("blue","white", "red")),
+                                       rect_gp = grid::gpar(col = "black", lwd = 1)
+) -> test
+
+ComplexHeatmap::draw(tidyHeatmap::as_ComplexHeatmap(test), heatmap_legend_side = "left", padding = unit(c(2,2,2,45), "mm")) -> hmap
+
+RNAscripts::save_cheatmap_svg(hmap, file.path(plot_dir, "TabulaMuris_gsea_heatmap.svg"),width = 9, height = 8)
+```

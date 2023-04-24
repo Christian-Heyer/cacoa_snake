@@ -1,0 +1,13 @@
+name: cacoa
+channels:
+    - conda-forge
+    - bioconda
+dependencies:
+    - bioconductor-clusterProfiler
+    - bioconductor-deseq2
+    - bioconductor-dose
+    - bioconductor-enhancedvolcano
+    - bioconductor-enrichplot
+    - bioconductor-fabia
+    - bioconductor-gofuncr
+    - bioconductor-rgraphviz

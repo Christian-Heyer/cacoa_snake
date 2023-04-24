@@ -19,7 +19,7 @@ if (exists("snakemake")) {
 #metadata <- purrr::map(f_names[1:3], readr::read_tsv)
   #<-GSE136831(file_path)
 meta_data <- readr::read_tsv(metadata_file)
-meta_data %>% as.data.frame() -> meta_frame 
+meta_data %>% as.data.frame() -> meta_frame
 rownames(meta_frame) <- meta_frame$CellBarcode_Identity
 #meta_frame <- meta_frame[,-c(1)]
 count_mtx <- Matrix::readMM(counts_file)

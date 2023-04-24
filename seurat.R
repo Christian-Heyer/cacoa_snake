@@ -13,11 +13,11 @@ if (exists("snakemake")) {
 } else {
   f_path <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/"
   
-	input_file_counts <- file.path(f_path, "Mouse_lung/Mouse_lung_raw/X.csv")
-	input_file_metadata <- file.path(f_path, "Mouse_lung/Mouse_lung_raw/obs.csv")
-	input_file_genes <- file.path(f_path, "Mouse_lung/Mouse_lung_raw/var.csv")
+	input_file_counts <- file.path(f_path, "TabularMuris_nonmyeloid_brain/TabularMuris_nonmyeloid_brain_raw/X.csv")
+	input_file_metadata <- file.path(f_path, "TabularMuris_nonmyeloid_brain/TabularMuris_nonmyeloid_brain_raw/obs.csv")
+	input_file_genes <- file.path(f_path, "TabularMuris_nonmyeloid_brain/TabularMuris_nonmyeloid_brain_raw/var.csv")
 	f_type <- "h5ad"
-	seurat_temp <- "Mouse_lung/yeet.rds"
+	seurat_temp <- "TabularMuris_nonmyeloid_brain_raw/yeet.rds"
 	organism <- "mm"
 	p_name <- "testproject"
 }
