@@ -4,3 +4,4 @@ logs
 .ipynb_checkpoints
 .Rhistory
 .Rbuildignore
+.Rproj.user

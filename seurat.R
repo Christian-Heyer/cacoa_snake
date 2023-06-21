@@ -41,7 +41,7 @@ if (f_type == "h5ad") {
 seurat_obj$nCount_RNA <- colSums(x = seurat_obj, slot = "counts")  # nCount_RNA
 #nFeature = colSums(x = GetAssayData(object = seurat_obj, slot = "counts") > 0) 
 if (organism == "mm") {
-  seurat_obj[["percent.mt"]] <- PercentageFeatureSet(seurat_obj, pattern = "^mt-")
+  seurat_obj[["percent.mt"]] <- PercentageFeatureSet(seurat_obj, pattern = "^Mt-")
 } else {
   seurat_obj[["percent.mt"]] <- PercentageFeatureSet(seurat_obj, pattern = "^MT-")
 }
