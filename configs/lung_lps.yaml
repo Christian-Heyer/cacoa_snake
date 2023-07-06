@@ -1,0 +1,43 @@
+BASE_FP: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq" 
+DATASET: "lung_lps"
+FILENAME: "lung_lps"
+
+
+samples:
+  basal:
+    mtx_file: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472505_Basal_matrix.mtx.gz"
+    barcodes_file: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472505_Basal_barcodes.tsv.gz"
+    features_file: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472505_Basal_features.tsv.gz"
+  Hour6:
+    mtx_file: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472506_Hour6_matrix.mtx.gz"
+    barcodes_file: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472506_Hour6_barcodes.tsv.gz"
+    features_file: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472506_Hour6_features.tsv.gz"
+  Day1:
+    mtx_file: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472507_Day1_matrix.mtx.gz"
+    barcodes_file: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472507_Day1_barcodes.tsv.gz"
+    features_file: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472507_Day1_features.tsv.gz"
+  Day2:
+    mtx_file: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472508_Day2_matrix.mtx.gz"
+    barcodes_file: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472508_Day2_barcodes.tsv.gz"
+    features_file: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472508_Day2_features.tsv.gz"
+  Day3:
+    mtx_file: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472509_Day3_matrix.mtx.gz"
+    barcodes_file: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472509_Day3_barcodes.tsv.gz"
+    features_file: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472509_Day3_features.tsv.gz"
+  Day7:    
+    mtx_file: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472510_Day7_matrix.mtx.gz"
+    barcodes_file: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472510_Day7_barcodes.tsv.gz"
+    features_file: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472510_Day7_features.tsv.gz"
+
+    
+    
+external_metadata:  "data/Adam_meta_data_wo_outlier.txt"
+organism: "mm"
+
+cacoa_opts:
+  id_field: "Subject_Identity"
+  age_field: "Age"
+  Ident: "Manuscript_Identity"
+  regroup_age: True
+
+umap_interest: ["Aplnr", "Cd74" ]

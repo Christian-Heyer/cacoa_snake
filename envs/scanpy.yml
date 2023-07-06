@@ -1,0 +1,16 @@
+name: scanpy
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - scanpy
+  - pandas
+  - numpy
+  - seaborn
+  - pybiomart
+  - leidenalg
+  - python-igraph
+  - omnipath
+  - pip:
+    - decoupler 
+    - pypath-omnipath

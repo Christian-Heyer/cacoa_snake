@@ -207,3 +207,69 @@ ComplexHeatmap::draw(tidyHeatmap::as_ComplexHeatmap(test), heatmap_legend_side =
 
 RNAscripts::save_cheatmap_svg(hmap, file.path(plot_dir, "TabulaMuris_gsea_heatmap.svg"),width = 9, height = 8)
 ```
+
+
+```{r}
+seurat_obj <- cao_obj$data.object
+all_markers<- FindMarkers(
+    seurat_obj,
+    ident.1 = "endothelial cell", only.pos = TRUE ,assay = "SCT", min.pct = 0.5
+)
+sig_markers <- all_markers %>% dplyr::filter(p_val_adj < 0.05) %>% rownames()
+```
+
+```{r}
+is_aged <-  seurat_obj$binary_age == "aged"
+seurat_obj <- cao_obj$data.object
+young_markers<- FindMarkers(
+    seurat_obj[,!is_aged],
+    ident.1 = "endothelial cell", only.pos = TRUE ,assay = "SCT", min.pct = 0.5
+)
+sig_young <- young_markers %>% dplyr::filter(p_val_adj < 0.05)%>% rownames()
+
+aged_markers <-  FindMarkers(
+    seurat_obj[,is_aged],
+    ident.1 = "endothelial cell", only.pos = TRUE ,assay = "SCT", min.pct = 0.5)
+sig_aged  <- aged_markers %>% dplyr::filter(p_val_adj < 0.05)%>% rownames()
+```
+
+```{r}
+library(UpSetR)
+library(tibble)
+sig_genes <- list(all_markers = sig_markers, young = sig_young, aged = sig_aged)
+
+upset(fromList(sig_genes))
+
+sig_genes$young[! (sig_genes$young %in% sig_genes$all_markers |
+                     sig_genes$young %in% sig_genes$aged_markers)
+                  ]
+
+writexl::write_xlsx(list(all_markers = as_tibble(all_markers, rownames = "gene"), 
+                         young_markers = as_tibble(young_markers, rownames = "gene"),
+                         aged_markers = as_tibble(aged_markers, rownames = "gene"),
+                         young_unique = as_tibble(young_markers[! (sig_genes$young %in% sig_genes$all_markers |
+                     sig_genes$young %in% sig_genes$aged_markers),], rownames = "gene"),
+                     aged_unique = as_tibble(aged_markers[! (sig_genes$aged %in% sig_genes$all_markers |
+                       sig_genes$aged %in% sig_genes$young),], rownames = "gene")
+                         ),
+                      path = "marker_genes.xlsx"
+                    )
+```
+
+
+## DecoupleR enrichment#
+
+
+```{r}
+library(decoupleR)
+library(OmnipathR)
+msigdb <- get_resource("MSigDB", organism = "mouse")
+msigdb <- msigdb |> dplyr::distinct("geneset", "collection" ,"genesymbol")
+seurat_obj <- cao_obj$data.object
+
+mat<- as.matrix(seurat_obj@assays$SCT@data)
+
+acts <- run_mlm(mat=mat, net=msigdb |> dplyr::filter(collection == "hallmark"), .source='geneset', .target='genesymbol',
+                minsize = 5)
+acts
+```

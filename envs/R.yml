@@ -1,0 +1,16 @@
+name: R
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - r-soupx
+  - r-matrix
+  - bioconductor-biomart
+  - r-seurat
+  - bioconductor-scater
+  - bioconductor-scdblfinder
+  - r-tibble
+  - r-dplyr
+  - r-vroom
+  - r-readr
+  - bioconductor-scry
