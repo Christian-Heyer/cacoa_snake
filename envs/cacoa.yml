@@ -63,4 +63,5 @@ dependencies:
     - r-irkernel
     - r-svglite
     - jupyterlab_code_formatter
+    - r-writexl
 prefix: /omics/groups/OE0436/internal/heyer/conda/envs/cacoa

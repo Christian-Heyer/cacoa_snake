@@ -107,7 +107,8 @@ rule run_cacoa_analysis:
     input:
         cacoa_obj = join(BASE_FP, "{dataset}", "cao_obj.RDS.gz")
     output:
-        cacoa_processed =  join(BASE_FP, "{dataset}", "processed_cao.RDS.gz")
+        cacoa_processed =  join(BASE_FP, "{dataset}", "processed_cao.RDS.gz"),
+        cao_xlsx = join(BASE_FP, "{dataset}", "report", "{dataset}" + "_de_res.xlsx")
     conda:
         "envs/cacoa.yml"
     threads: 16

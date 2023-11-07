@@ -9,6 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 library(cacoa)
 library(DESeq2)
+library(Seurat)
 library(magrittr)
 library(ggplot2)
 library(tidyverse)
@@ -25,7 +26,7 @@ if (exists("snakemake")) {
     cao_path <- file.path(base_fp, "cao_obj.RDS.gz")
     cao_output <- file.path(base_fp, "processed_cao.RDS.gz")
       group_colors <- list( young = "#FC8D59",
-      old = "#A0A0A4")
+      aged = "#A0A0A4")
       plot_dir <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/TabularMuris/plots"
   if(!dir.exists(plot_dir)) {
     dir.create(plot_dir)
@@ -167,8 +168,8 @@ gsea_in <- data.frame(gene_id = res$Gene, LFC = res$stat)
 x<- RNAscripts::run_msig_enricher(list(gsea_in), category = "H")
 
 ec_enrich <- RNAscripts::plot_enrichment(x[[1]], X = "ID", Y = "NES", pval = "p.adjust")
-dp <- better_dotplot(x[[1]],c_groups =  c("aged_ec", "young_ec"))
-purrr::map2(dp, c("aged_ec", "young_ec"), save_dotplots, gsea_type = "msigdb", p_path = plot_dir)
+dp <- RNAscripts::better_dotplot(x[[1]],c_groups =  c("aged_ec", "young_ec"))
+purrr::map2(dp, c("aged_ec", "young_ec"), RNAscripts::save_dotplots, gsea_type = "msigdb", p_path = plot_dir)
 
 dp
 ggsave("Hallmark_dp.svg",ec_enrich, path = plot_dir, height = 8, width = 8)
@@ -213,7 +214,7 @@ RNAscripts::save_cheatmap_svg(hmap, file.path(plot_dir, "TabulaMuris_gsea_heatma
 seurat_obj <- cao_obj$data.object
 all_markers<- FindMarkers(
     seurat_obj,
-    ident.1 = "endothelial cell", only.pos = TRUE ,assay = "SCT", min.pct = 0.5
+    ident.1 = "endothelial cell", only.pos = TRUE ,assay = "RNA", min.pct = 0.5
 )
 sig_markers <- all_markers %>% dplyr::filter(p_val_adj < 0.05) %>% rownames()
 ```
@@ -223,13 +224,13 @@ is_aged <-  seurat_obj$binary_age == "aged"
 seurat_obj <- cao_obj$data.object
 young_markers<- FindMarkers(
     seurat_obj[,!is_aged],
-    ident.1 = "endothelial cell", only.pos = TRUE ,assay = "SCT", min.pct = 0.5
+    ident.1 = "endothelial cell", only.pos = TRUE ,assay = "RNA", min.pct = 0.5
 )
 sig_young <- young_markers %>% dplyr::filter(p_val_adj < 0.05)%>% rownames()
 
 aged_markers <-  FindMarkers(
     seurat_obj[,is_aged],
-    ident.1 = "endothelial cell", only.pos = TRUE ,assay = "SCT", min.pct = 0.5)
+    ident.1 = "endothelial cell", only.pos = TRUE ,assay = "RNA", min.pct = 0.5)
 sig_aged  <- aged_markers %>% dplyr::filter(p_val_adj < 0.05)%>% rownames()
 ```
 
@@ -264,12 +265,115 @@ writexl::write_xlsx(list(all_markers = as_tibble(all_markers, rownames = "gene")
 library(decoupleR)
 library(OmnipathR)
 msigdb <- get_resource("MSigDB", organism = "mouse")
-msigdb <- msigdb |> dplyr::distinct("geneset", "collection" ,"genesymbol")
+msigdb <- msigdb |> dplyr::distinct(geneset, collection, genesymbol)
 seurat_obj <- cao_obj$data.object
 
-mat<- as.matrix(seurat_obj@assays$SCT@data)
+mat<- as.matrix(seurat_obj@assays$RNA@data)
 
-acts <- run_mlm(mat=mat, net=msigdb |> dplyr::filter(collection == "hallmark"), .source='geneset', .target='genesymbol',
+acts <- run_ulm(mat=mat, net=msigdb |> dplyr::filter(collection == "hallmark"), .source='geneset', .target='genesymbol',
                 minsize = 5)
 acts
+```
+
+```{r}
+seurat_obj[["msigdbmlm"]] <- acts %>%
+  pivot_wider(id_cols = 'source', names_from = 'condition',
+  values_from = 'score') %>%
+  column_to_rownames('source') %>%
+  Seurat::CreateAssayObject(.)
+seurat_obj
+DefaultAssay(object = seurat_obj) <- "msigdbmlm"
+seurat_obj <- ScaleData(seurat_obj, do.scale = FALSE)
+seurat_obj@assays$msigdbmlm@data <- seurat_obj@assays$msigdbmlm@scale.data
+
+
+p1 <- DimPlot(seurat_obj, reduction = "umap", label = TRUE, pt.size = 0.5) + 
+  NoLegend() + ggtitle('Cell types')
+p2 <- (FeaturePlot(seurat_obj, features = c("HALLMARK-DNA-REPAIR")) & 
+  scale_colour_gradient2(low = 'blue', mid = 'white', high = 'red')) +
+  ggtitle('DNA REPAIR')
+p1 | p2
+```
+
+```{r,fig.width = 12}
+seurat_obj$cell_age <- paste0(seurat_obj$cell_ontology_class, "_", seurat_obj$binary_age)
+# Extract activities from object as a long dataframe
+df <- t(as.matrix(seurat_obj@assays$msigdbmlm@data)) %>%
+  as.data.frame() %>%
+  mutate(cluster = seurat_obj$cell_age) %>%
+  pivot_longer(cols = -cluster, names_to = "source", values_to = "score") %>%
+  group_by(cluster, source) %>%
+  summarise(mean = mean(score))
+
+# Transform to wide matrix
+top_acts_mat <- df %>%
+  pivot_wider(id_cols = 'cluster', names_from = 'source',
+              values_from = 'mean') %>%
+  column_to_rownames('cluster') %>%
+  as.matrix()
+
+# Choose color palette
+palette_length = 100
+my_color = colorRampPalette(c("Darkblue", "white","red"))(palette_length)
+
+my_breaks <- c(seq(-2, 0, length.out=ceiling(palette_length/2) + 1),
+               seq(0.05, 2, length.out=floor(palette_length/2)))
+
+# Plot
+ComplexHeatmap::pheatmap(top_acts_mat, border_color = NA, color=my_color, breaks = my_breaks) 
+```
+
+```{r}
+df_per_cell <- t(as.matrix(seurat_obj@assays$msigdbmlm@data)) %>%
+  as.data.frame() %>%
+  mutate(cluster = seurat_obj$cell_age) %>%
+  pivot_longer(cols = -cluster, names_to = "source", values_to = "score") %>%
+  group_by(cluster, source)
+
+endo_diff <- sort(top_acts_mat["endothelial cell_aged",]  - top_acts_mat["endothelial cell_young",] )
+
+for(gene_set in c(names(c(head(endo_diff,3), tail(endo_diff,3))))) {
+
+ p <- ggplot(df_per_cell %>% dplyr::filter(source == gene_set), aes(cluster,score)) +
+         geom_boxplot()+ theme_bw()   + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) + ggtitle(gene_set)
+ print(p)
+}
+```
+
+## Senescence
+
+Now we will see if we can score the senecesence in these data. 
+```{r}
+# List of genes as an R vector
+gene_vector <- c(
+    "FERMT2", "PLXNA2", "FLT1", "CAV2", "ICAM2", "GALNT18", "LAMA4", "SPARC", "PCDH12",
+    "PLEKHG1", "MYCT1", "EFNB2", "CD93", "RHOJ", "KDR", "PODXL", "DLL4", "DOCK6", "PLVAP",
+    "TMEM204", "NES", "COL4A2", "HECW2", "DUSP6", "ACVRL1", "PTPRG", "ESAM", "PRSS23", "GJA1",
+    "AFAP1L1", "STC1", "COX7A1", "ITGA5", "BCL6B", "IGFBP7", "TM4SF18", "DLC1", "JCAD", "CYYR1",
+    "SYNPO", "MMRN2", "CD34", "FZD4", "A2M", "CAVIN1", "CDH5", "IL3RA", "BCAM", "COL4A1",
+    "S100A16", "TCF4", "TGM2", "BMPR2", "SCARF1", "ECE1", "PLK2", "RHOC", "SERPINH1", "INSR",
+    "IPO11", "MAGI1", "NID1", "MECOM", "UACA", "TUBB6", "LMO2", "NECTIN2", "GRB10", "LAMA5",
+    "LUZP1", "MAST4", "DYSF", "PNP", "NRP1", "CAVIN3", "LRRC8A", "EFNA1", "NFIA", "EHD4",
+    "TNFAIP1", "PLXND1", "LAMB1", "RGS3", "ZEB1", "TRIOBP", "FSCN1", "YES1", "JAG1", "PEA15",
+    "RAB13", "PHACTR2", "LAMC1", "VWA1", "PPIC", "SLC44A2", "PLEKHA1", "TPM4", "GNAI2", "MGLL",
+    "UTRN", "CAPNS1"
+)
+
+mouse_genes <- RNAscripts::convertHumanGeneHomologs(gene_vector)
+
+# Print the vector
+EC_sen_net <- data.frame(geneset = "EC.SENESCENCE.SIG", genesymbol = mouse_genes)
+# Get Fridman senescence from Msigdb
+Fridman <- msigdb |> dplyr::filter(geneset == "FRIDMAN_SENESCENCE_UP"| geneset == "FRIDMAN_SENESCENCE_DN")
+#Fridman_down <- msigdb |> dplyr::filter(geneset == "FRIDMAN_SENESCENCE_DN")
+
+senescence <- bind_rows(Fridman, EC_sen_net)
+
+rm(acts)
+rm(cao_obj)
+gc()
+acts <- run_ora(mat, network = senescence,.source='geneset', .target='genesymbol',
+                minsize = 5)
+
+
 ```

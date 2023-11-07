@@ -20,3 +20,5 @@ cacoa_opts:
   age_field: "age"
   Ident: "cell_ontology_class"
   regroup_age: True
+
+is_raw: False

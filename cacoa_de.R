@@ -14,8 +14,10 @@ library(org.Mm.eg.db)
 if (exists("snakemake")) {
     cao_path <- snakemake@input[["cacoa_obj"]]
     cao_output <- snakemake@output[["cacoa_processed"]]
+    xlsx_path <- snakemake@output[["cao_xlsx"]]
     threads <- snakemake@threads
     organism <- snakemake@config[["organism"]]
+
        
     
 } else {
@@ -31,7 +33,7 @@ if (exists("snakemake")) {
 cao <- readRDS(cao_path)
         
 cao$data.object<- FindNeighbors(cao$data.object,features = VariableFeatures(cao$data.object))
-cao$data.object@misc$graph.name <- "SCT_snn"
+cao$data.object@misc$graph.name <- "RNA_snn"
 cao$n.cores <- threads
 
 cao$estimateCellLoadings()
@@ -95,5 +97,10 @@ for(de_n in list("de.Wald", "deFixed_LRT", "de.fix", "de.loo")) {
     cao <- estimateAllStabs(de_n = de_n, cao_obj = cao, org_db = org_db)
 } 
 
+#from cao_obj$test.results$de.loo extract the results from [[cell.type]]$res for each cell type
+
+extract_res <- purrr::map(cao$test.results$de.loo, function(x) x$res)
+
+writexl::write_xlsx(extract_res, path = xlsx_path)
 saveRDS(cao,  cao_output ) 
 

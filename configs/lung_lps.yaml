@@ -41,3 +41,4 @@ cacoa_opts:
   regroup_age: True
 
 umap_interest: ["Aplnr", "Cd74" ]
+adata_available: False

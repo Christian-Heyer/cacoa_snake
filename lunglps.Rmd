@@ -1,0 +1,919 @@
+---
+title: An R Markdown document converted from "./lunglps.ipynb"
+output: html_document
+---
+
+# Analysis of Lung LPS and tabula Senis data
+
+In this Notebook the single cell RNAseq data from Zhang, L. et al. Single-cell transcriptomic profiling of lung endothelial cells identifies dynamic inflammatory and regenerative subpopulations. JCI Insight 7, (2022) is primarily analyzed.
+
+The Motivation was to see how Aplnr expression reacts the the inflammation stimulus given and if senescence processes are initated in the endothelial cells. 
+
+```{r setup}
+#Sys.setenv(RETICULATE_PYTHON = "/omics/groups/OE0436/internal/heyer/conda/envs/new_scanpy/bin/python")
+library(reticulate)
+use_condaenv("r_scanpy")
+#use_python(python = "/omics/groups/OE0436/internal/heyer/conda/envs/new_scanpy/bin/python")
+
+```
+
+```{python}
+
+import scanpy as sc
+import yaml
+import os
+import pandas as pd
+import numpy as np
+import decoupler as dc
+os.environ['HTTP_PROXY']="http://www-int.dkfz-heidelberg.de:80"
+os.environ['HTTPS_PROXY']="http://www-int.dkfz-heidelberg.de:80"
+```
+
+```{python}
+with open("configs/lung_lps.yaml", "r") as stream:
+    try:
+        config=yaml.safe_load(stream)
+    except yaml.YAMLError as exc:
+        print(exc)
+```
+
+```{python}
+
+
+
+paths = [os.path.join(config["BASE_FP"], config["DATASET"], sample, "anndata", "adata_norm_processed.h5ad") for sample in config["samples"].keys()]
+
+adata = list(map(sc.read_h5ad, paths))
+```
+
+## Full Dataset
+
+We satrt off by analyzing these data by loading an adata object of all cells and adding the cluster annotaions by the authors (provided upon request)
+
+Then we add the "immunec" and devEC populations based on the marker genes described in the paper above to assign the clusters to the cell tyes described.
+
+
+The we plot the UMAPS
+
+```{python}
+adata_big=sc.read_h5ad("/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/merged/anndata/adata_merged.h5ad")
+```
+
+```{python}
+sample_names = ["basal", "Hour6","Day1", "Day2", "Day3", "Day7"]
+labels = dict()
+for s_name in sample_names:
+    labels[s_name] = pd.read_csv(f"./data/lunglps/{s_name}_label.csv").set_index("Unnamed: 0")
+
+```
+
+```{python}
+labels["basal"] = labels["basal"].replace({1: "immunec", 2: "devEC", 3: "Aerocyte"})
+labels["Hour6"] = labels["Hour6"].replace({1: "immunec", 2: "devEC", 3: "Aerocyte"})
+labels["Day1"] = labels["Day1"].replace({1: "immunec", 2: "devEC", 3: "Aerocyte"})
+labels["Day2"] = labels["Day2"].replace({1: "immunec", 2: "devEC", 4: "Aerocyte"})
+labels["Day3"] = labels["Day3"].replace({1: "immunec", 3: "proEC", 2: "Aerocyte"})
+labels["Day7"] = labels["Day7"].replace({1: "immunec", 2: "devEC", 4: "Aerocyte"})
+labels_all = pd.concat(labels)
+labels_all=labels_all.reset_index()
+labels_all=labels_all.rename(columns={"level_0": "samples","Unnamed: 0": "cell_id"})
+```
+
+```{python}
+labels_all=labels_all.set_index("cell_id")
+```
+
+```{python}
+adata_big.obs["Clusters"] = labels_all["Clusters"]
+
+adata_big.obs["Clusters"][adata_big.obs["Clusters"].isnull()] = "missing"
+
+sc.pp.neighbors(adata_big)
+sc.tl.umap(adata_big)
+```
+
+```{python}
+adata_big.obs["Clusters"] = adata_big.obs["Clusters"].astype("category")
+sc.pl.umap(
+    adata_big,
+    color=["sample"]
+)
+sc.pl.umap(adata_big, color = "Clusters")
+```
+
+These first wo UMAPS above show cells from all expreiments and the clusters annotated from in the second figure. 
+
+Aerocytes cljuster separately to all other cells. Among the other ECs Hour6 both devEC and ImmuneEC populations cluster away -> Whereas in the other data these cell types seem to cluster in one large cluster in the middle. 
+
+```{python}
+sc.pl.umap(
+    adata_big, 
+    color=["Aplnr"],     
+    vmin=0,
+    vmax="p99",  # set vmax to the 99th percentile of the gene count instead of the maximum, to prevent outliers from making expression in other cells invisible. Note that this can cause problems for extremely lowly expressed genes.
+    sort_order=False,  # do not plot highest expression on top, to not get a biased view of the mean expression among cells
+    frameon=False,
+    cmap="Reds")
+        
+```
+
+## Compositional Analysis
+
+Analyze the composition of the annoated EC cell types to track the changes. 
+
+```{python}
+import sccoda
+#import pertpy as pt
+```
+
+```{python}
+sccoda_model = pt.tl.Sccoda()
+sccoda_data = sccoda_model.load(
+    adata_big,
+    type="cell_level",
+    generate_sample_level=True,
+    cell_type_identifier="Clusters",
+    sample_identifier="sample",
+)
+sccoda_data
+```
+
+Aplnr Expression is primarily in the center cluster with some expression in the DevEC and immuneEC cluster in the center of the image. 
+
+## Get Annotations
+
+Functional annotations are added from MSIGDB and we also create a subdataset with signatures from FRIDMAN_SENSCENCE_UP/DN
+
+```{python}
+msigdb=pd.read_csv("resources/msig_mouse.csv.gz")
+msig_small=msigdb[["genesymbol","geneset"]].drop_duplicates()
+```
+
+```{python}
+senscence = msig_small[msig_small['geneset'].isin(['FRIDMAN_SENESCENCE_UP', 'FRIDMAN_SENESCENCE_DN'])]
+```
+
+```{python}
+import pandas as pd
+
+# Define the URL of the TSV file
+url = "http://www.informatics.jax.org/downloads/reports/HMD_HumanPhenotype.rpt"
+
+# Define the column names for the dataframe
+col_names = ["hgene","hID", "mgene", "mID", "lcol", "ncol"]
+
+# Use pandas to read the TSV file into a dataframe
+mouse_human_homologs = pd.read_csv(url, sep="\t", header = None, index_col=None)
+mouse_human_homologs.columns = col_names
+# Print the first few rows of the dataframe
+```
+
+### EC.SENESCENCE.SIG 
+
+THe gene list below was taken from Wu, Z., Uhl, B., Gires, O. & Reichel, C. A. A transcriptomic pan-cancer signature for survival prognostication and prediction of immunotherapy response based on endothelial senescence. J Biomed Sci 30, 1–19 (2023).
+where a pan-cancer transriptome signature for EC senscence is descrbied. -> We checked its activitiy in this dataset to asses it versus other known senescence indicators. 
+
+We translate the genes to the human homologs to start off. and then add it to our senescence signature of interest. 
+
+```{python}
+import pandas as pd
+
+# List of genes as a Python Series
+gene_series = [
+    "FERMT2", "PLXNA2", "FLT1", "CAV2", "ICAM2", "GALNT18", "LAMA4", "SPARC", "PCDH12",
+    "PLEKHG1", "MYCT1", "EFNB2", "CD93", "RHOJ", "KDR", "PODXL", "DLL4", "DOCK6", "PLVAP",
+    "TMEM204", "NES", "COL4A2", "HECW2", "DUSP6", "ACVRL1", "PTPRG", "ESAM", "PRSS23", "GJA1",
+    "AFAP1L1", "STC1", "COX7A1", "ITGA5", "BCL6B", "IGFBP7", "TM4SF18", "DLC1", "JCAD", "CYYR1",
+    "SYNPO", "MMRN2", "CD34", "FZD4", "A2M", "CAVIN1", "CDH5", "IL3RA", "BCAM", "COL4A1",
+    "S100A16", "TCF4", "TGM2", "BMPR2", "SCARF1", "ECE1", "PLK2", "RHOC", "SERPINH1", "INSR",
+    "IPO11", "MAGI1", "NID1", "MECOM", "UACA", "TUBB6", "LMO2", "NECTIN2", "GRB10", "LAMA5",
+    "LUZP1", "MAST4", "DYSF", "PNP", "NRP1", "CAVIN3", "LRRC8A", "EFNA1", "NFIA", "EHD4",
+    "TNFAIP1", "PLXND1", "LAMB1", "RGS3", "ZEB1", "TRIOBP", "FSCN1", "YES1", "JAG1", "PEA15",
+    "RAB13", "PHACTR2", "LAMC1", "VWA1", "PPIC", "SLC44A2", "PLEKHA1", "TPM4", "GNAI2", "MGLL",
+    "UTRN", "CAPNS1"
+]
+
+# Print the Series 
+print(gene_series)
+```
+
+```{python}
+mouse_genes = mouse_human_homologs[mouse_human_homologs["hgene"].isin(gene_series)]
+mouse_genes
+```
+
+```{python}
+mouse_genes
+```
+
+```{python}
+EC_sig = pd.DataFrame({"genesymbol": mouse_genes.mgene, "geneset": "ec_Senescence_sig"})
+```
+
+```{python}
+full_sen =pd.concat([senscence, EC_sig])
+```
+
+```{python}
+hallmarks = msigdb[msigdb['collection']=='hallmark']
+
+# Remove duplicated entries
+hallmarks = hallmarks[~hallmarks.duplicated(['geneset', 'genesymbol'])]
+hallmarks
+```
+
+```{python}
+adata_big.X = adata_big.layers["scran_normalization"]
+```
+
+```{python}
+adata_big.layers
+```
+
+```{python}
+dc.run_ora(
+    mat=adata_big,
+    net=pd.concat([hallmarks, full_sen]),
+    source='geneset',
+    target='genesymbol',
+    verbose=True,
+    use_raw=False
+)
+```
+
+```{python}
+dc.run_aucell(
+    mat=adata_big,
+    net=pd.concat([hallmarks, full_sen]),
+    source='geneset',
+    target='genesymbol',
+    verbose=True,
+    use_raw=False
+)
+```
+
+```{python}
+labels_all.index = labels_all.index.to_flat_index()
+```
+
+```{python}
+adata_big
+sc.pl.violin(adata_big, keys = ["Aplnr", "Junb"], groupby = "sample", order=sample_names)
+adata_big.obs["Clusters"]
+```
+
+```{python}
+sc.pl.dotplot(adata_big, var_names = ["Aplnr", "Apln"], groupby = "sample", categories_order = sample_names)
+```
+
+```{python}
+adata_big.obs["sample_cluster"] = adata_big.obs["sample"].to_string() + "_" + adata_big.obs["Clusters"].to_string()
+
+sc.pl.dotplot(adata_big, var_names = ["Aplnr", "Apln"], groupby = "Clusters")
+```
+
+Here we clearly see that Aplnr Expression is present at the start but after treatment with LPS drops to almost 0 by day1. However by Day7 -> Aplnr Expression increases and overshoots the expression from the start of the experiment
+
+Lastly, we have som extra plots below with alternative color schemes and looking at Aplnr Expression across the different cell types. 
+
+```{python}
+sc.pl.umap(
+    adata_big,
+    color=["Prox1","Nr2f2", "Aplnr"],     
+    vmin=0,
+    vmax="p99",  # set vmax to the 99th percentile of the gene count instead of the maximum, to prevent outliers from making expression in other cells invisible. Note that this can cause problems for extremely lowly expressed genes.
+    sort_order=False,  # do not plot highest expression on top, to not get a biased view of the mean expression among cells
+    frameon=False,
+    cmap="Reds"
+)
+```
+
+```{python}
+adata_big
+```
+
+```{python}
+sc.pl.umap(
+    adata_big,
+    color=["Aplnr"],
+    vmax="p99"
+)
+sc.pl.violin(
+    adata_big,
+    keys= ["Aplnr"],
+    groupby="Clusters"
+)
+```
+
+## Enrichments for adata big Lung lps
+
+To get a better understanding of the data, we performed an over representation analysis (using decoupler-py) against the HALLMARK gene sets from Msigdb, FRIDMAN_SENESCENCE_UP/DN and the EC.SENESCENCE.SIG signature.
+
+
+
+### Enrichment using ORA tests
+
+```{python}
+adata_big.X = np.nan_to_num(adata_big.X)
+```
+
+```{python}
+acts = dc.get_acts(adata_big, obsm_key='ora_estimate')
+
+# We need to remove inf and set them to the maximum value observed
+acts_v = acts.X.ravel()
+max_e = np.nanmax(acts_v[np.isfinite(acts_v)])
+acts.X[~np.isfinite(acts.X)] = max_e
+
+acts
+
+
+
+acts.obsm["ora_estimate"].columns
+```
+
+```{python}
+gs_of_interest = ['HALLMARK_DNA_REPAIR', 'HALLMARK_INTERFERON_ALPHA_RESPONSE', 
+                        'FRIDMAN_SENESCENCE_DN', 'FRIDMAN_SENESCENCE_UP', 'ec_Senescence_sig']
+sc.pl.umap(acts, color=gs_of_interest, cmap='RdBu_r',vmax = "p99",ncols=3)
+sc.pl.umap(acts, color="sample")
+
+sc.pl.violin(acts, keys=gs_of_interest, groupby='sample', rotation=90, multi_panel=True,order =["basal", "Hour6", "Day1", "Day2", "Day3", "Day7"] )
+sc.pl.violin(acts, keys=gs_of_interest, groupby='Clusters', rotation=90, multi_panel=True )
+```
+
+Here we the activity of some selected gene sets in these data. 
+. First we have the per cell Enrichment between six gene sets. After Stimulus at Hour6 Intereron Response Increases due ot the DNA Damage. DNA Repair is active in a subset of proECs at day3. 
+
+The Senescene signatures show now clear signs in the UMAP, however in the Violin plots we see some evidence that the EC Senescence signature falls a bit during inflammation and is increased by day7. HOwever the picture is not very clear here. 
+
+Next we rank the group sources by testing if the change between one samples vs all other samples is significant in some of the gene sets. 
+
+We than take the top five per group and produce the matrix plot below. 
+
+```{python}
+df = dc.rank_sources_groups(acts, groupby='sample', reference='basal', method='t-test_overestim_var')
+df
+
+df_basal = dc.rank_sources_groups(acts, groupby='sample', reference='basal', method='t-test_overestim_var')
+
+```
+
+```{python}
+df_basal
+```
+
+```{python}
+n_markers = 5
+source_markers = df.groupby('group').head(n_markers).groupby('group')['names'].apply(lambda x: list(x)).to_dict()
+source_markers =  {k: source_markers[k] for k in ["basal", "Hour6", "Day1", "Day2", "Day3", "Day7"]}
+
+n_markers = 5
+source_markers_basal = df_basal.groupby('group').head(n_markers).groupby('group')['names'].apply(lambda x: list(x)).to_dict()
+source_markers_basal =  {k: source_markers_basal[k] for k in ["basal", "Hour6", "Day1", "Day2", "Day3", "Day7"]}
+
+
+```
+
+```{python}
+sc.pl.matrixplot(acts, source_markers, 'sample', dendrogram=False, title="vs_all",
+                 colorbar_title='Z-scaled scores',standard_scale='var', cmap='RdBu_r',categories_order = ["basal", "Hour6", "Day1", "Day2", "Day3", "Day7"])
+
+sc.pl.matrixplot(acts, source_markers, 'sample', dendrogram=False, title="vs basal",
+                 colorbar_title='Z-scaled scores',standard_scale='var', cmap='RdBu_r',categories_order = ["basal", "Hour6", "Day1", "Day2", "Day3", "Day7"])
+```
+
+
+### Enrichments using AUcell
+
+Here we use an alternative strategy for enrichment analysis. Since we have no weights assigned to genes we stuck to another method that doesn expect weighted gene sets (AUcell)
+
+Plots are corresponding to the OR analysis. 
+
+```{python}
+acts = dc.get_acts(adata_big, obsm_key='aucell_estimate')
+
+# We need to remove inf and set them to the maximum value observed
+acts_v = acts.X.ravel()
+max_e = np.nanmax(acts_v[np.isfinite(acts_v)])
+acts.X[~np.isfinite(acts.X)] = max_e
+
+acts
+
+
+
+acts.obsm["aucell_estimate"].columns
+```
+
+```{python}
+gs_of_interest = ['HALLMARK_DNA_REPAIR', 'HALLMARK_INTERFERON_ALPHA_RESPONSE', 
+                        'FRIDMAN_SENESCENCE_DN', 'FRIDMAN_SENESCENCE_UP', 'ec_Senescence_sig']
+sc.pl.umap(acts, color=gs_of_interest, cmap='RdBu_r',vmax = "p99",ncols=3)
+sc.pl.umap(acts, color="sample")
+
+sc.pl.violin(acts, keys=gs_of_interest, groupby='sample', rotation=90, multi_panel=True,order =["basal", "Hour6", "Day1", "Day2", "Day3", "Day7"] )
+```
+
+```{python}
+acts
+```
+
+```{python}
+df = dc.rank_sources_groups(acts, groupby='sample', reference='rest', method='t-test_overestim_var')
+df
+df_basal = dc.rank_sources_groups(acts, groupby='sample', reference='basal', method='t-test_overestim_var')
+df_basal
+```
+
+```{python}
+n_markers = 5
+source_markers = df.groupby('group').head(n_markers).groupby('group')['names'].apply(lambda x: list(x)).to_dict()
+source_markers =  {k: source_markers[k] for k in ["basal", "Hour6", "Day1", "Day2", "Day3", "Day7"]}
+
+source_markers_basal = df_basal.groupby('group').head(n_markers).groupby('group')['names'].apply(lambda x: list(x)).to_dict()
+source_markers_basal =  {k: source_markers_basal[k] for k in ["basal", "Hour6", "Day1", "Day2", "Day3", "Day7"]}
+
+```
+
+```{python}
+sc.pl.matrixplot(acts, source_markers, 'sample', dendrogram=False,standard_scale="var", title= "vs all",
+                 colorbar_title='Z-scaled scores', cmap='RdBu_r', categories_order = ["basal", "Hour6", "Day1", "Day2", "Day3", "Day7"])
+
+sc.pl.matrixplot(acts, source_markers_basal, 'sample', dendrogram=False,standard_scale="var", title = "vs basal",
+                 colorbar_title='Z-scaled scores', cmap='RdBu_r', categories_order = ["basal", "Hour6", "Day1", "Day2", "Day3", "Day7"])
+```
+
+Enrichments usinsg AUCell are very similar to ORA -> So we refer to the ORA results. 
+
+## Adata single test code
+
+In this part we show the analysis we ran on each single group to have look at the expression in each sample to identfiy the cell subgroups. 
+
+Not to relevant. 
+
+```{python}
+adata_basal = sc.read_h5ad("/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/basal/anndata/adata_norm_processed.h5ad")
+```
+
+```{python}
+f_paths=[f"/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/{s_name}/anndata/adata_norm_processed.h5ad"for s_name in sample_names]
+
+```
+
+```{python}
+adata_dict = dict(zip(sample_names, adata))
+```
+
+```{python}
+samp_name = "Day7"
+check_pro_ecs = False
+
+adata_obj = adata_dict[samp_name]
+adata_obj.obs["Clusters"] = labels[samp_name]["Clusters"]
+adata_obj.obs["Clusters"][adata_obj.obs["Clusters"].isnull()] = 99
+adata_obj.obs["Clusters"] = adata_obj.obs["Clusters"].astype("category")
+#sc.pp.neighbors(adata_obj,10)
+#sc.tl.umap(adata_obj)
+sc.pl.umap(
+    adata_obj,
+    color="Clusters",  
+)
+```
+
+```{python}
+adata_obj.obs["Clusters"]
+```
+
+```{python}
+marker_genes = {"immuneEC": ["Cd74", "H2-Aa", "H2-Ab1", "Irf7", "Icam1", "Il4ra"], 
+                "devEC": ["Junb", "Egr1", "Sox17", "Kdr", "Ace"], 
+                "Aerocyte": ["Car4", "Ednrb", "Emp2", "Itgb5"],
+             }
+
+if check_pro_ecs:
+      marker_genes["proEC"] = ["Cdk1", "Tk1", "E2f1", "Ccna2", "Ccne1"]
+
+adata_obj.layers["counts"] = adata_obj.X
+adata_obj.X = adata_obj.layers["scran_normalization"]
+adata_obj.var["highly_variable"] = adata_obj.var["highly_deviant"]
+sc.tl.pca(adata_obj, n_comps=50, use_highly_variable=True)
+sc.pp.neighbors(adata_obj)
+sc.tl.umap(adata_obj)
+```
+
+```{python}
+sc.pl.umap(adata_obj,color = "Clusters")
+for ct in marker_genes.keys():
+    print(f"{ct.upper()}:")  # print cell subtype name
+    sc.pl.umap(
+        adata_obj,
+        color=marker_genes[ct],
+        vmin=0,
+        vmax="p99",  # set vmax to the 99th percentile of the gene count instead of the maximum, to prevent outliers from making expression in other cells invisible. Note that this can cause problems for extremely lowly expressed genes.
+        sort_order=False,  # do not plot highest expression on top, to not get a biased view of the mean expression among cells
+        frameon=False,
+        cmap="Reds",  # or choose another color map e.g. from here: https://matplotlib.org/stable/tutorials/colors/colormaps.html
+    )
+    print("\n\n\n")
+
+
+    
+sc.pl.umap(
+        adata_obj,
+        color=["Aplnr", "Apln"],
+        vmin=0,
+        vmax="p99",  # set vmax to the 99th percentile of the gene count instead of the maximum, to prevent outliers from making expression in other cells invisible. Note that this can cause problems for extremely lowly expressed genes.
+        sort_order=False,  # do not plot highest expression on top, to not get a biased view of the mean expression among cells
+        frameon=False,
+        cmap="Reds",  # or choose another color map e.g. from here: https://matplotlib.org/stable/tutorials/colors/colormaps.html
+    )   
+```
+
+The figure above shows the expression of Marker genes for AEROCYTES IMMUNEC AND DEVEC groups. 
+Aplnr and Apln are also added. 
+
+
+```{python}
+sc.tl.louvain(adata_obj,resolution=0.4,)
+sc.tl.leiden(adata_obj,resolution=0.4, key_added="leiden_res0_4")
+sc.pl.umap(
+    adata_obj,
+    color=["leiden_res0_25", "leiden_res0_5","leiden_res0_4", "leiden_res1", "louvain"], ncols = 2
+)
+```
+
+Test of various clustering settings -> However we used clustering provided by the authors
+
+```{python}
+sc.tl.rank_genes_groups(
+    adata_obj, groupby="Clusters", method="wilcoxon", key_added = "dea_clusters"
+)
+```
+
+```{python}
+sc.pl.umap(
+    adata_obj,
+    color=["Aplnr"], ncols = 2
+)
+```
+
+```{python}
+ adata_obj.obs["Clusters"] == "5"
+    
+```
+
+```{python}
+sc.pl.rank_genes_groups_dotplot(
+    adata_obj, groupby="Clusters", standard_scale="var", n_genes=5, key="dea_clusters", dendrogram = False)
+```
+
+Top Differentially expressed genes for the cluster groups + the three subgroup. 
+Group 99 are cells not present in the clustering provided. 
+
+```{python}
+sc.tl.filter_rank_genes_groups(
+    adata_obj,
+    min_in_group_fraction=0.2,
+    max_out_group_fraction=0.2,
+    key="dea_clusters",
+    key_added="dea_clusters_filtered",
+)
+```
+
+```{python}
+sc.pl.rank_genes_groups_dotplot(
+    adata_obj,
+    groups = ['Aerocyte', 'devEC', 'immunec'],
+    groupby="Clusters",
+    standard_scale="var",
+    n_genes=15,
+    key="dea_clusters_filtered",
+    dendrogram = False
+)
+```
+
+After filtering celar marker genes barely present, since they are not really unique. 
+
+```{python}
+marker_genes = {"immuneEC": ["Cd74", "H2-Aa", "H2-Ab1"], "devEC": ["Junb", "Egr1", "Sox17"], "Aerocyte": ["Car4", "Ednrb", "Emp2", "Itgb5"]}
+
+adata_basal.layers["counts"] = adata_basal.X
+adata_basal.X = adata_basal.layers["scran_normalization"]
+adata_basal.var["highly_variable"] = adata_basal.var["highly_deviant"]
+sc.tl.pca(adata_basal, n_comps=50, use_highly_variable=True)
+sc.pp.neighbors(adata_basal)
+sc.tl.umap(adata_basal)
+```
+
+```{python}
+for ct in marker_genes.keys():
+    print(f"{ct.upper()}:")  # print cell subtype name
+    sc.pl.umap(
+        adata_basal,
+        color=marker_genes[ct],
+        vmin=0,
+        vmax="p99",  # set vmax to the 99th percentile of the gene count instead of the maximum, to prevent outliers from making expression in other cells invisible. Note that this can cause problems for extremely lowly expressed genes.
+        sort_order=False,  # do not plot highest expression on top, to not get a biased view of the mean expression among cells
+        frameon=False,
+        cmap="Reds",  # or choose another color map e.g. from here: https://matplotlib.org/stable/tutorials/colors/colormaps.html
+    )
+    print("\n\n\n")
+```
+
+```{python}
+dc.run_ora(
+    mat=adata_obj,
+    net=pd.concat([hallmarks, full_sen]),
+    source='geneset',
+    target='genesymbol',
+    verbose=True,
+    use_raw=False
+)
+
+```
+
+```{python}
+acts = dc.get_acts(adata_obj, obsm_key='ora_estimate')
+
+# We need to remove inf and set them to the maximum value observed
+acts_v = acts.X.ravel()
+max_e = np.nanmax(acts_v[np.isfinite(acts_v)])
+acts.X[~np.isfinite(acts.X)] = max_e
+
+# We can scale the obtained activities for better visualizations
+sc.pp.scale(acts)
+acts
+
+```
+
+```{python}
+sc.pl.umap(acts, color=['HALLMARK_DNA_REPAIR', 'HALLMARK_INTERFERON_ALPHA_RESPONSE', 
+                        'FRIDMAN_SENESCENCE_DN', 'FRIDMAN_SENESCENCE_UP', 'ec_Senescence_sig', 'louvain'], cmap='RdBu_r', vcenter=0)
+sc.pl.violin(acts, keys=['HALLMARK_DNA_REPAIR', 'HALLMARK_INTERFERON_ALPHA_RESPONSE', 
+                        'FRIDMAN_SENESCENCE_DN', 'FRIDMAN_SENESCENCE_UP', 'ec_Senescence_sig'], groupby='louvain', rotation=90)
+
+```
+
+### Tabula Muris SEnis Score DNA Damage
+
+Now we import the tabula muris senis data and score the DNA damage on these data. 
+
+
+```{python}
+senis_path = "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/TabularMuris/senis_droplet_lung.h5ad"
+import scanpy as sc
+import seaborn as sns
+adata_senis = sc.read_h5ad(senis_path)
+```
+
+```{python}
+adata_senis.layers
+adata=adata_senis
+col_name = "tabula_muris_senis"
+```
+
+```{python}
+adata.var_names_make_unique
+# mitochondrial genes
+adata.var["mt"] = adata.var_names.str.startswith("mt-")
+# ribosomal genes
+adata.var["ribo"] = adata.var_names.str.startswith(("Rps", "Rpl"))
+# hemoglobin genes.
+adata.var["hb"] = adata.var_names.str.contains(("^Hb[^(P)]"))
+sc.pp.calculate_qc_metrics(
+    adata, qc_vars=["mt", "ribo", "hb"], inplace=True, percent_top=[20], log1p=True
+)
+
+p1 = sns.displot(adata.obs["total_counts"], bins=100, kde=False,)   
+```
+
+## What are we doing
+
+We are attempting to replicate clustering results from https://insight.jci.org/articles/view/158079/figure/1 . 
+Afterwards we want to perform DEA analysis. 
+
+```{python}
+col_name = "tabula_muris_senis"
+sc.pl.violin(adata, "pct_counts_mt", title=col_name)
+sc.pl.scatter(adata, "total_counts", "n_genes_by_counts", 
+                       color="pct_counts_mt",title=col_name)
+```
+
+```{python}
+import numpy as np
+from scipy.stats import median_abs_deviation
+def is_outlier(adata, metric: str, nmads: int):
+    M = adata.obs[metric]
+    outlier = (M < np.median(M) - nmads * median_abs_deviation(M)) | (
+        np.median(M) + nmads * median_abs_deviation(M) < M
+    )
+    return outlier
+
+
+adata.obs["outlier"] = (
+        is_outlier(adata, "log1p_total_counts", 5)
+        | is_outlier(adata, "log1p_n_genes_by_counts", 5)
+        | is_outlier(adata, "pct_counts_in_top_20_genes", 5)
+    )
+adata.obs.outlier.value_counts()
+adata.obs["mt_outlier"] = is_outlier(adata, "pct_counts_mt", 3) | (
+        adata.obs["pct_counts_mt"] > 8
+    )
+print(f"Total number of cells: {adata.n_obs}")
+adata = adata[(~adata.obs.outlier) & (~adata.obs.mt_outlier)].copy()
+
+print(f"Number of cells after filtering of low quality cells: {adata.n_obs}")
+
+adata.obs.mt_outlier.value_counts()
+```
+
+```{python}
+sc.pl.scatter(adata, "total_counts", "n_genes_by_counts", color="pct_counts_mt")
+sc.pp.filter_genes(adata, min_cells=20)
+```
+
+adata_senis
+
+```{python}
+adata_senis.X.max()
+```
+
+```{python}
+sc.tl.umap(adata_senis)
+```
+
+```{python}
+sc.pl.umap(adata_senis,color="age")
+sc.pl.umap(adata_senis,color="cell_ontology_class")
+```
+
+UMAP is now run direcctly without any further processing from our side. 
+
+Looks a bit different -> If this is an issue I can either pass the UMAP from cacoa to use that one. 
+
+```{python}
+adata_senis
+
+sc.pl.umap(adata_senis,color="age")
+```
+
+```{python}
+adata_senis
+```
+
+```{python}
+dc.run_ora(
+    mat=adata_senis,
+    net=pd.concat([hallmarks, full_sen]),
+    source='geneset',
+    target='genesymbol',
+    verbose=True,
+    use_raw=False,
+)
+
+```
+
+```{python}
+acts = dc.get_acts(adata_senis, obsm_key='ora_estimate')
+
+# We need to remove inf and set them to the maximum value observed
+acts_v = acts.X.ravel()
+max_e = np.nanmax(acts_v[np.isfinite(acts_v)])
+acts.X[~np.isfinite(acts.X)] = max_e
+
+# We can scale the obtained activities for better visualizations
+
+acts
+
+```
+
+```{python}
+acts.obs["binary_age"] = acts.obs["age"].isin(["3m", "1m"])
+acts.obs.binary_age.replace({False: "aged", True: "young"}, inplace=True)
+acts.obs["cell_type_age"] = acts.obs["binary_age"].astype(str) + "_" + acts.obs["cell_ontology_class"].astype(str)
+```
+
+```{python}
+gs_of_interest = ['HALLMARK_DNA_REPAIR', 'HALLMARK_INTERFERON_ALPHA_RESPONSE', 
+                        'FRIDMAN_SENESCENCE_DN', 'FRIDMAN_SENESCENCE_UP', 'ec_Senescence_sig']
+sc.pl.umap(acts, color=gs_of_interest, cmap='RdBu_r',vmax = "p99",ncols=3)
+sc.pl.umap(acts, color=["age","cell_ontology_class", "binary_age"])
+
+sc.pl.violin(acts, keys=["ec_Senescence_sig","FRIDMAN_SENESCENCE_UP"], groupby='cell_type_age', rotation=90, multi_panel=True)
+```
+
+Here we score the Senescence sigatures between -> Showing that ec.SENESECENCE.SI is unique, but is higher in young cells when scoring with ORA.
+
+
+```{python}
+acts.obs
+```
+
+```{python}
+df = dc.rank_sources_groups(acts, groupby='cell_type_age', reference='rest', method='t-test_overestim_var')
+df
+```
+
+```{python}
+n_markers = 5
+source_markers = df.groupby('group').head(n_markers).groupby('group')['names'].apply(lambda x: list(x)).to_dict()
+source_markers
+
+```
+
+```{python}
+sc.pl.umap(acts, color=['HALLMARK_DNA_REPAIR', 'cell_ontology_class'], cmap='RdBu_r', vcenter=0)
+sc.pl.umap(acts, color=['HALLMARK_APOPTOSIS', 'cell_ontology_class'], cmap='RdBu_r', vcenter=0)
+sc.pl.violin(acts, keys=['HALLMARK_DNA_REPAIR'], groupby='cell_ontology_class', rotation=90)
+sc.pl.violin(acts, keys=['HALLMARK_DNA_REPAIR'], groupby='cell_type_age', rotation=90)
+```
+
+Here we look at DNA repair processes and see a cell type specific activitiy of these. 
+
+```{python}
+sc.pl.matrixplot(acts, source_markers, 'cell_type_age', dendrogram=True,standard_scale="var",
+                 colorbar_title='Z-scaled scores', cmap='RdBu_r')
+```
+
+The Matrixplot helps us check on the general structure of the cells
+
+-> Myeloid and immune cell types show distinct signatures from the tissue cell types.
+
+Zoioming in on the endothelial cells
+
+## 
+
+### Running with AUcell
+
+```{python}
+dc.run_aucell(
+    mat=adata_senis,
+    net=pd.concat([hallmarks, full_sen]),
+    source='geneset',
+    target='genesymbol',
+    verbose=True,
+    use_raw=False,
+)
+
+```
+
+```{python}
+acts = dc.get_acts(adata_senis, obsm_key='aucell_estimate')
+
+# We need to remove inf and set them to the maximum value observed
+acts_v = acts.X.ravel()
+max_e = np.nanmax(acts_v[np.isfinite(acts_v)])
+acts.X[~np.isfinite(acts.X)] = max_e
+
+# We can scale the obtained activities for better visualizations
+
+acts
+
+```
+
+```{python}
+acts.obs["binary_age"] = acts.obs["age"].isin(["3m", "1m"])
+acts.obs.binary_age.replace({False: "aged", True: "young"}, inplace=True)
+acts.obs["cell_type_age"] = acts.obs["binary_age"].astype(str) + "_" + acts.obs["cell_ontology_class"].astype(str)
+```
+
+```{python}
+gs_of_interest = ['HALLMARK_DNA_REPAIR', 'HALLMARK_INTERFERON_ALPHA_RESPONSE', 
+                        'FRIDMAN_SENESCENCE_DN', 'FRIDMAN_SENESCENCE_UP', 'ec_Senescence_sig']
+sc.pl.umap(acts, color=gs_of_interest, cmap='RdBu_r',vmax = "p99",ncols=3)
+sc.pl.umap(acts, color=["age","cell_ontology_class", "binary_age"])
+
+sc.pl.violin(acts, keys=["ec_Senescence_sig","FRIDMAN_SENESCENCE_UP"], groupby='cell_type_age', rotation=90, multi_panel=True)
+```
+
+Here we score the Senescence sigatures between -> Showing that ec.SENESECENCE.SI is unique, but is higher in young cells when scoring with ORA.
+
+
+```{python}
+acts.obs
+```
+
+```{python}
+df = dc.rank_sources_groups(acts, groupby='cell_type_age', reference='rest', method='t-test_overestim_var')
+df
+```
+
+```{python}
+n_markers = 5
+source_markers = df.groupby('group').head(n_markers).groupby('group')['names'].apply(lambda x: list(x)).to_dict()
+source_markers
+
+```
+
+```{python}
+sc.pl.umap(acts, color=['HALLMARK_DNA_REPAIR', 'cell_ontology_class'], cmap='RdBu_r', vcenter=0)
+sc.pl.umap(acts, color=['HALLMARK_APOPTOSIS', 'cell_ontology_class'], cmap='RdBu_r', vcenter=0)
+sc.pl.violin(acts, keys=['HALLMARK_DNA_REPAIR'], groupby='cell_ontology_class', rotation=90)
+sc.pl.violin(acts, keys=['HALLMARK_DNA_REPAIR'], groupby='cell_type_age', rotation=90)
+```
+
+```{python}
+sc.pl.matrixplot(acts, source_markers, 'cell_type_age', dendrogram=True,standard_scale="var",
+                 colorbar_title='Z-scaled scores', cmap='RdBu_r')
+```
+

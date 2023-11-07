@@ -9,13 +9,14 @@ if (exists("snakemake")) {
   f_type <- snakemake@params[["f_type"]]
   organism <- snakemake@config[["organism"]]
   p_name <- snakemake@config[["DATASET"]]
+  is_raw <- snakemake@config[["is_raw"]]
   source("common.R")
 } else {
   f_path <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/"
   
-	input_file_counts <- file.path(f_path, "TabularMuris_nonmyeloid_brain/TabularMuris_nonmyeloid_brain_raw/X.csv")
-	input_file_metadata <- file.path(f_path, "TabularMuris_nonmyeloid_brain/TabularMuris_nonmyeloid_brain_raw/obs.csv")
-	input_file_genes <- file.path(f_path, "TabularMuris_nonmyeloid_brain/TabularMuris_nonmyeloid_brain_raw/var.csv")
+	input_file_counts <- file.path(f_path, "TabularMuris/TabularMuris_raw/X.csv")
+	input_file_metadata <- file.path(f_path, "TabularMuris/TabularMuris_raw/obs.csv")
+	input_file_genes <- file.path(f_path, "TabularMuris/TabularMuris_raw/var.csv")
 	f_type <- "h5ad"
 	seurat_temp <- "TabularMuris_nonmyeloid_brain_raw/yeet.rds"
 	organism <- "mm"
@@ -47,6 +48,6 @@ if (organism == "mm") {
 }
 
 
-seurat_obj <- processSeurat(seurat_obj)
+seurat_obj <- processSeurat(seurat_obj, is_raw = is_raw)
 
 saveRDS(seurat_obj, output_file)

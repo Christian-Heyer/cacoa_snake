@@ -35,7 +35,7 @@ create_cao_from_seurat <- function(s_path = seurat_path, do_permute = permute) {
     # Run standard Seurat processing
     seurat_obj <- readRDS(seurat_path)
     #seurat_obj <- SCTransform(seurat_obj,verbose = F)
-    seurat_obj@assays$SCT@counts <- seurat_obj@assays$SCT@counts
+
     #seurat_obj <- RunPCA(seurat_obj, 
      #                    features = VariableFeatures(object = seurat_obj))
     #seurat_obj <- FindNeighbors(seurat_obj, features = VariableFeatures(object = seurat_obj))

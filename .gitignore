@@ -5,3 +5,8 @@ logs
 .Rhistory
 .Rbuildignore
 .Rproj.user
+*.html
+*.svg
+*.xlsx
+*.Rproj
+
