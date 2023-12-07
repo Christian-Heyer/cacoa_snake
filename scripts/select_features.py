@@ -56,6 +56,7 @@ def plot_pca_umap(adata_obj, outpath):
 
     return adata_obj
 
+
 adata = plot_pca_umap(adata, output_paths)
 
 adata.write_h5ad(output_adata)

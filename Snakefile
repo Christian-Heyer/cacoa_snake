@@ -34,7 +34,8 @@ if config["download_link"]["f_type"] == "h5ad":
             #temp(dir(join(BASE_FP, "{dataset}", "{dataset}_raw"))), 
             counts = join(BASE_FP, "{dataset}", "{dataset}_raw", "X.csv"),
             cell_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "obs.csv"),
-            gene_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "var.csv")
+            gene_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "var.csv"),
+            h5ad = join(BASE_FP, "{dataset}", "{dataset}_update." + config["download_link"]["f_type"])
         params:
             out_dir = join(BASE_FP, "{dataset}", "{dataset}_raw")
         resources:
@@ -49,11 +50,14 @@ if config["download_link"]["f_type"] == "h5ad":
             counts = join(BASE_FP, "{dataset}", "{dataset}_raw", "X.csv"),
             cell_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "obs.csv"),
             gene_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "var.csv"),
+            h5ad = join(BASE_FP, "{dataset}", "{dataset}_update." + config["download_link"]["f_type"])
         output:
-            #convert_seurat  =  temp(join(BASE_FP, "{dataset}", "{dataset}_raw.h5seurat")), 
+            seurat_temp  =  temp(join(BASE_FP, "{dataset}", "{dataset}_update.h5seurat")), 
             seurat_path = join(BASE_FP, "{dataset}", "seurat_obj.RDS.gz")
         params:
-            f_type = config["download_link"]["f_type"]
+            f_type = config["download_link"]["f_type"],
+            use_anndataR = config["use_anndataR"],
+            use_seuratdisk = config["use_seuratdisk"],
         conda:  
             "envs/seurat.yml"
         resources:
@@ -125,10 +129,12 @@ rule plot_report:
     input:
         cacoa_processed = join(BASE_FP, "{dataset}", "processed_cao.RDS.gz")
     output:
-        report_html = join(BASE_FP, "{dataset}", "report", "{dataset}" + "_cacoa.r.ipynb")
+        report_html = join(BASE_FP, "{dataset}", "report", "{dataset}" + "_cacoa.r.ipynb"),
+        plot_path = directory(join(BASE_FP, "{dataset}", "report", "{dataset}_plots"))
     params:
         permute = False,
-        save_plots = True
+        save_plots = True,
+        plot_path = join(BASE_FP, "{dataset}", "report", "{dataset}_plots")
     conda:
         "envs/cacoa.yml"
     log:

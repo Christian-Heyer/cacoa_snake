@@ -1,0 +1,189 @@
+---
+title: "lunglps_scoring.Rmd"
+author: "Christian Heyer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#devtools::install_github("scverse/anndataR")
+#devtools::install_github("ChangSuBiostats/CS-CORE")
+
+library(anndataR)
+library(CSCORE)
+library(Seurat)
+library(SeuratDisk)
+library(SCpubr)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+
+h5ad_path <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/merged/seurat/seurat_obj.rds.gz"
+#h5_seuratpath <- 
+  
+  
+#seurat_path <- Convert(source = h5ad_path, dest = "")
+
+adata <- readRDS(h5ad_path)
+
+DefaultAssay(adata) <- "soupX_counts"
+
+# Drop other assays to reclaim memory
+#adata[["RNA"]] <- NULL
+#adata[["analytic_pearson_residuals"]] <- NULL
+#adata[["log1p_norm"]] <- NULL
+#adata[["scran_normalization"]] <- NULL
+#adata[["counts"]] <- NULL
+
+gc()
+```
+
+```{r}
+adata_small <- adata[,!(adata$cell_type == "Aerocyte")]
+
+adata_small <- FindVariableFeatures(adata_small,assay = "log1p_norm", selection.method = "vst",nfeatures = 6000,mean.cutoff = c(1,8))
+VariableFeaturePlot(adata_small,assay = "log1p_norm",selection.method = "vst")
+genes_selected <- VariableFeatures(adata_small, assay = "log1p_norm",)
+
+# Filter Variable Features to remove lowly expressed genes
+mean_exp <- rowMeans(adata_small@assays$log1p_norm@data)
+#threshold <- 0.5 # Set your desired threshold for mean expression
+#filter the bottom 0.2 quantile of genes_selected based on mean_exp
+threshold <- 0.2
+filtered_genes <- genes_selected[mean_exp[genes_selected] > quantile(mean_exp[genes_selected], threshold)]
+
+hist(mean_exp[genes_selected], breaks = 40)
+hist(mean_exp[filtered_genes], breaks = 40)
+
+adata_small$nCount_RNA <- NULL
+
+#length(which(is.nan(adata_small@assays$RNA@counts )))
+
+```
+
+```{r}
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, eval = F, echo=FALSE}
+mean_exp = rowMeans(adata_small@assays$soupX_counts@counts/rowSums(adata_small@assays$soupX_counts@counts, na.rm = T))
+#genes_selected = names(sort.int(mean_exp, decreasing = T))[1:5000]
+#genes_selected <- c(genes_selected, "Aplnr")
+#genes_selected <- VariableFeatures(adata_small, assay = "scran_normalization",)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r, eval = F}
+library(bsub)
+if(!file.exists( "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/CSCore_res.RDS.gz")) {
+  save.image(file =  "/omics/groups/OE0436/internal/heyer/temp/cscore_image.RData")
+  bsub_chunk( name = "test CSCORE", packages = c("Seurat", "CSCORE"), hours = 24, 
+              memory = 48,cores = 1, R_version = "4.2.0",image = "/omics/groups/OE0436/internal/heyer/temp/cscore_image.RData", code = {
+  adata_small = RenameAssays(adata_small, soupX_counts = "RNA")
+  CSCORE_result <- CSCORE(adata_small, genes = c(genes_selected))
+  saveRDS(CSCORE_result, "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/CSCore_res.RDS.gz")
+  })
+}
+
+```
+
+
+```{r}
+cscore_path <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/CSCore_res.RDS.gz"
+CSCORE_result <- readRDS(cscore_path)
+
+CSCORE_coexp <- CSCORE_result$est
+
+CSCORE_p <- CSCORE_result$p_value
+p_matrix_BH = matrix(0, length(genes_selected), length(genes_selected))
+p_matrix_BH[upper.tri(p_matrix_BH)] = p.adjust(CSCORE_p[upper.tri(CSCORE_p)], method = "BH")
+p_matrix_BH <- p_matrix_BH + t(p_matrix_BH)
+
+hist(CSCORE_p, main = "p_values")
+hist(p_matrix_BH, main = "BH adj. p values")
+
+# Set co-expression entires with BH-adjusted p-values greater than 0.05 to 0
+CSCORE_coexp[p_matrix_BH > 0.05] <- 0
+
+library(WGCNA)
+# Compute the adjacency matrix based on the co-expression matrix
+adj = WGCNA::adjacency.fromSimilarity(abs(CSCORE_coexp), power = 1)
+# Compute the topological overlap matrix
+TOM = WGCNA::TOMsimilarity(adj)
+dissTOM = 1-TOM
+rownames(dissTOM) <- colnames(dissTOM) <- genes_selected
+# Run hierarchical clustering as in the WGCNA workflow
+hclust_dist = hclust(as.dist(dissTOM), method = "average") 
+memb = dynamicTreeCut::cutreeDynamic(dendro = hclust_dist, 
+                     distM = dissTOM, 
+                     deepSplit = 2,
+                     pamRespectsDendro = FALSE,
+                     minClusterSize = 10)
+# For more instructions on how to tune the parameters in the WGCNA workflow,
+# please refer to https://horvath.genetics.ucla.edu/html/CoexpressionNetwork/Rpackages/WGCNA/Tutorials/
+
+names(memb) = genes_selected
+memb_tab <- table(memb)
+module_list = lapply(sort(unique(memb)), function(i_k) names(which(memb == i_k)))
+```
+
+### Cluster Profiler analysis
+
+```{r}
+if (!require(clusterProfiler)) {
+  BiocManager::install("clusterProfiler")
+  library(clusterProfiler)
+}else{
+  library(clusterProfiler)
+}
+```
+
+```{r}
+# Set all genes in clustering analysis as background,
+# such that the enrichment result of any module is not attributed to its high expression levels.
+universe <- genes_selected
+
+# Filter GO terms based on BH-adjusted p values < 0.05
+####
+## Note: the following codes can take a long time to run as 
+## in this example there are more than 100 co-expressed gene modules from WGCNA
+####
+ego_result <- lapply(1:length(module_list), function(i){
+  enrichGO(gene = module_list[[i]],
+         OrgDb = 'org.Mm.eg.db', # human
+         keyType = "SYMBOL",
+         ont = "ALL",
+         pAdjustMethod = "BH",
+         universe = universe,
+         pvalueCutoff = 0.05)
+})
+```
+
+```{r}
+top_enrich_clusters <- which(sapply(ego_result, function(x) 
+  (x@result$p.adjust[1] < 0.001) & (dim(x)[1]>10)))
+top_enrich_go <- lapply(top_enrich_clusters, function(i) ego_result[[i]]@result[1:3,])
+```
+
+```{r}
+for(i in 1:length(top_enrich_go)){
+  print(top_enrich_go[[i]][, c('Description', 'GeneRatio', 'p.adjust')])
+  cat('\n')
+}
+```
+#TODO Score 
+
+
+

@@ -22,3 +22,5 @@ cacoa_opts:
   regroup_age: True
 
 is_raw: False
+use_anndataR: True
+use_seuratdisk: True

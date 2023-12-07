@@ -11,6 +11,10 @@ BASE_FP = config["BASE_FP"]
 DATASET = config["DATASET"]
 SAMPLES = config["samples"].keys()
 
+output_files=[]
+
+if config["build_lung_lps_report"]:
+    output_files.append(join(BASE_FP, DATASET, "merged", "report.html"))
 
 rule all:
     input:
@@ -19,8 +23,10 @@ rule all:
             sample=SAMPLES,
         ),
         join(BASE_FP, DATASET, "merged","anndata", "adata_merged.h5ad"),
+        join(BASE_FP, DATASET, "merged", "seurat", "seurat_obj.rds.gz"),
         expand(join(BASE_FP, DATASET, "merged", "plots", "umap_{gene}.jpg"),
-                            gene=["Aplnr"])
+                            gene=["Aplnr"]),
+        output_files
 
 
 include: "./common.smk"
@@ -100,16 +106,29 @@ rule run_soupx_and_scdblfind:
     script:
         "../scripts/doublet_soup.R"
 
+rule add_soupx_to_adata:
+    input:
+        corrected_counts = join(
+            BASE_FP, DATASET, "{sample}", "anndata", "csvs", "corrected_counts.csv"
+        ),
+        doublet_data = join(
+            BASE_FP, DATASET, "{sample}", "anndata", "csvs", "doublet_data.csv"
+        ),
+        adata_h5=join(BASE_FP, DATASET, "{sample}", "anndata", "adata.h5ad"),
+    output:
+        adata_h5=temp(join(BASE_FP, DATASET, "{sample}", "anndata", "adata_with_dub.h5ad")),
+    conda:
+        "../envs/scanpy.yml"
+    threads: 1
+    resources:
+        mem_mb=8192 * 2,
+        time_min=30,
+    script:
+        "../scripts/add_soupx_to_adata.py"
 
 rule normalize_scanpy:
     input:
-        adata_h5=join(BASE_FP, DATASET, "{sample}", "anndata", "adata.h5ad"),
-        corrected_counts=join(
-            BASE_FP, DATASET, "{sample}", "anndata", "csvs", "corrected_counts.csv"
-        ),
-        doublet_data=join(
-            BASE_FP, DATASET, "{sample}", "anndata", "csvs", "doublet_data.csv"
-        ),
+        adata_h5=join(BASE_FP, DATASET, "{sample}", "anndata", "adata_with_dub.h5ad"),
     output:
         adata_out_path=temp(
             join(BASE_FP, DATASET, "{sample}", "anndata", "adata_norm_temp.h5ad")
@@ -127,7 +146,7 @@ rule normalize_scanpy:
         mem_mb=8192 * 2,
         time_min=30,
     script:
-        "../scripts/normalize.py"
+        "../scripts/normalize_single.py"
 
 
 rule compute_size_factors:
@@ -248,17 +267,34 @@ rule select_variable_features:
 rule merge_samples:
     input:
         adata_files=expand(join(
-            BASE_FP, DATASET, "{sample}", "anndata", "adata_norm_processed.h5ad"
-        ),sample = SAMPLES)
+            BASE_FP, DATASET, "{sample}", "anndata", "adata_with_dub.h5ad"
+        ),sample = SAMPLES),
     output:
         big_adata=join(BASE_FP, DATASET, "merged","anndata", "adata_merged.h5ad")
     conda: "../envs/scanpy.yml"
+    params:
+        batch_key="sample",
+        n_top_genes=4000
     threads: 1
     resources:
         mem_mb = 32768,
         time_min = 9
     script: "../scripts/merge_adata.py"
 
+rule export_to_seurat:
+    input:
+        adata_processed = join(BASE_FP, DATASET, "merged", "anndata", "adata_processed.h5ad"),
+    output:
+        seurat_obj=join(BASE_FP, DATASET, "merged", "seurat", "seurat_obj.rds.gz")
+    params:
+        use_anndataR = True
+    conda: "../envs/R.yml"
+    threads: 1
+    resources:
+        mem_mb = 32768*2,
+        time_min = 59
+    script:
+        "../scripts/export_to_seurat.R"
 rule compare_gene:
     input:
         adata_files=expand(join(
@@ -274,6 +310,42 @@ rule compare_gene:
     threads: 1
     resources:
         mem_mb = 16384,
-        time_min = 9
+        time_min = 59
     script:
         "../scripts/plot_umap.py"
+    
+rule create_lunglps_report:
+    input:
+        adata_big=join(BASE_FP, DATASET, "merged","anndata", "adata_merged.h5ad"),
+        adata_paths=expand(join(
+            BASE_FP, DATASET, "{sample}", "anndata", "adata_norm_processed.h5ad"
+        ),sample = SAMPLES),
+    output:
+        report_ipynb=join(BASE_FP, DATASET, "merged", "report.ipynb"),
+        adata_processed = join(BASE_FP, DATASET, "merged", "anndata", "adata_processed.h5ad"),
+    params:
+    conda: "../envs/lunglps.yaml" #"../envs/lunglps.yaml"
+    threads: 8
+    log:
+        notebook = join(BASE_FP, DATASET, "merged", "report.ipynb")
+    resources:
+        mem_mb = 32768*2,
+        time_min = 59
+    notebook: 
+        "../lunglps.py.ipynb"
+
+rule export_report:
+    input:
+        report_ipynb=join(BASE_FP, DATASET, "merged", "report.ipynb"),
+    output:
+        report_html=join(BASE_FP, DATASET, "merged", "report.html"),
+    conda: "../envs/lunglps.yaml"
+    threads: 1
+    resources:
+        mem_mb = 32768*2,
+        time_min = 59
+    shell:
+        """
+        jupyter nbconvert --to html {input.report_ipynb} --output {output.report_html}
+        """
+

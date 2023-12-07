@@ -64,4 +64,5 @@ dependencies:
     - r-svglite
     - jupyterlab_code_formatter
     - r-writexl
+    - r-matrix=1.6-1
 prefix: /omics/groups/OE0436/internal/heyer/conda/envs/cacoa

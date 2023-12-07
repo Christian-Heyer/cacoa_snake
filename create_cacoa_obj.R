@@ -22,7 +22,7 @@ if(exists("snakemake")) {
 
     cacoa_opts <- snakemake@config[["cacoa_opts"]]
 } else {
-    base_fp = "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/TabularMuris_nonmyeloid_brain/"
+    base_fp = "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/TabularMuris"
     seurat_path = file.path(base_fp, "seurat_obj.RDS.gz")
     output_p = file.path(base_fp, "cao_obj.rds.gz")
     config <- yaml::read_yaml("/desktop-home/heyer/projects/Vascular_Aging/RNAseq/scRNAseq_scripts/configs/tabula_muris_brain.yaml")

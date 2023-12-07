@@ -10,3 +10,14 @@ dependencies:
   - r-vroom
   - r-readr
   - bioconductor-geoquery
+  - r-matrix=1.6-1
+  - bioconductor-rhdf5
+  - bioconductor-singlecellexperiment
+  - r-seuratobject
+  - r-cli
+  - r-crayon
+  - r-hdf5r
+  - r-r6
+  - r-rlang
+  - r-stringi
+  - r-withr

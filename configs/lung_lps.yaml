@@ -42,3 +42,6 @@ cacoa_opts:
 
 umap_interest: ["Aplnr", "Cd74" ]
 adata_available: False
+use_anndataR: False
+
+build_lung_lps_report: True

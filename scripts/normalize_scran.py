@@ -10,6 +10,6 @@ scran = adata.X / adata.obs["size_factors"].values[:, None]
 adata.layers["scran_normalization"] = csr_matrix(sc.pp.log1p(scran))
 
 adata.write_h5ad(snakemake.output["adata_out_path"])
-np.savetxt(snakemake.output["corrected_counts_filtered"], adata.X.T,
+np.savetxt(snakemake.output["corrected_counts_filtered"], adata.X.T.toarray(),
            delimiter=",", header =", ".join(adata.obs.index))
 adata.var.to_csv(snakemake.output["var_filtered"])

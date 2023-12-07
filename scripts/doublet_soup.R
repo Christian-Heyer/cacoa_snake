@@ -6,6 +6,7 @@ library(Seurat)
 library(scater)
 library(scDblFinder)
 library(BiocParallel)
+library(biomaRt)
 ensembl <- biomaRt::useEnsembl(biomart = "genes", dataset = "mmusculus_gene_ensembl", version = 93)
 
 if(exists("snakemake")){
@@ -22,10 +23,10 @@ if(exists("snakemake")){
 }else {
     mtx_file <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472505_Basal_matrix.mtx.gz"
     features_file <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472505_Basal_features.tsv.gz"
-    adata_genes <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/anndata/csvs/var.csv"
-    adata_cells <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/anndata/csvs/obs.csv"
-    adata_counts <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/anndata/csvs/X.csv"
-    soupx_groups <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/qc/soupx_groups.csv"
+    adata_genes <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/basal/anndata/csvs/var.csv"
+    adata_cells <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/basal/anndata/csvs/obs.csv"
+    adata_counts <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/basal/anndata/csvs/X.csv"
+    soupx_groups <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/basal/qc/soupx_groups.csv"
     ## output
     corrected_counts_path <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/anndata/csvs/X_processed.csv"
     doublet_data_path <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/anndata/csvs/doublet_data.csv"
@@ -93,3 +94,4 @@ doublet_data <- tibble::tibble(cell_id = colnames(sce),doublet_score = doublet_s
 readr::write_csv(doublet_data, file = doublet_data_path)
 
 readr::write_csv(tibble::as_tibble(out, rownames = "genes"), file = corrected_counts_path)
+
