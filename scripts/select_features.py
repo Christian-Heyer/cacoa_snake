@@ -60,3 +60,5 @@ def plot_pca_umap(adata_obj, outpath):
 adata = plot_pca_umap(adata, output_paths)
 
 adata.write_h5ad(output_adata)
+# export umap coords to csv
+np.savetxt(output_paths["umap_coords"], adata.obsm["X_umap"], delimiter=",")

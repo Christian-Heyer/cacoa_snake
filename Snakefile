@@ -39,7 +39,8 @@ if config["download_link"]["f_type"] == "h5ad":
         params:
             out_dir = join(BASE_FP, "{dataset}", "{dataset}_raw")
         resources:
-            mem_mb=2048*8
+            time_min=59,
+            mem_mb=2048*16
         conda:
             "envs/anndata.yml"
         script:
@@ -61,6 +62,7 @@ if config["download_link"]["f_type"] == "h5ad":
         conda:  
             "envs/seurat.yml"
         resources:
+            time_min=59,
             mem_mb = 96000
         threads: 8
         script:
@@ -93,7 +95,8 @@ rule create_cacoa:
     input:
         seurat_path = join(BASE_FP, "{dataset}", "seurat_obj.RDS.gz" )
     output:
-        cacoa_obj = join(BASE_FP, "{dataset}", "cao_obj.RDS.gz")
+        cacoa_obj = join(BASE_FP, "{dataset}", "cao_obj.RDS.gz"),
+        umap_coords = join(BASE_FP, "{dataset}", "umap_coords.csv")
     params:
         permute = False
     conda:

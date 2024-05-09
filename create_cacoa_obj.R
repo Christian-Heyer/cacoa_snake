@@ -17,15 +17,16 @@ library(cacoa)
 if(exists("snakemake")) {
     seurat_path <- snakemake@input[["seurat_path"]]
     output_p <- snakemake@output[["cacoa_obj"]]
+    umap_path <- snakemake@output[['umap_coords']]
     permute <- snakemake@params[["permute"]]
     plan("multicore", workers = snakemake@threads)
 
     cacoa_opts <- snakemake@config[["cacoa_opts"]]
 } else {
-    base_fp = "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/TabularMuris"
+    base_fp = "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/TabularMuris_counts"
     seurat_path = file.path(base_fp, "seurat_obj.RDS.gz")
     output_p = file.path(base_fp, "cao_obj.rds.gz")
-    config <- yaml::read_yaml("/desktop-home/heyer/projects/Vascular_Aging/RNAseq/scRNAseq_scripts/configs/tabula_muris_brain.yaml")
+    config <- yaml::read_yaml("/desktop-home/heyer/projects/Vascular_Aging/RNAseq/scRNAseq_scripts/configs/tabularmuris_counts.yaml")
     cacoa_opts <- config$cacoa_opts
     permute <- F
 }
@@ -87,4 +88,9 @@ create_cao_from_seurat <- function(s_path = seurat_path, do_permute = permute) {
 
 cao_obj <- create_cao_from_seurat(seurat_path, permute)
 
+seurat_obj <- cao_obj$data.object
+#get Umap coords
+umap_coords <- Embeddings(seurat_obj, reduction = "umap")
+
+write.csv(umap_coords, file = umap_path)
 saveRDS(cao_obj, file = output_p)

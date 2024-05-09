@@ -1,8 +1,11 @@
 import scanpy as sc
+import numpy as np
+import pandas as pd
 
 if "snakemake" in globals():
     input_h5ads = snakemake.input["adata_files"]
     output_path = snakemake.output["big_adata"]
+    umap_output = snakemake.output["umap_coords"]
     batch_key = snakemake.params["batch_key"]
     n_top_genes = snakemake.params["n_top_genes"]
 
@@ -28,3 +31,15 @@ sc.tl.umap(big_adata)
 
 big_adata.write_h5ad(output_path)
 
+# Get UMAP coordinates and add cell_id from adata_big as an additional column to the umap coords
+umap_coords = big_adata.obsm["X_umap"]
+# add cell_id column
+cell_id = big_adata.obs.index
+# concatenate cell_id to umap_coords
+
+umap_coords = pd.concat([pd.Series(cell_id), pd.DataFrame(umap_coords)], axis=1)
+# big_adata.obs["cell_id"] = big_adata.obs.index
+
+
+# export umap coords to csv
+pd.DataFrame(umap_coords).to_csv(umap_output, index=False, header=True)

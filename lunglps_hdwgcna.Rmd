@@ -1,4 +1,4 @@
----
+consensus <- FALSE---
 title: "lunglps_hdWGCNA"
 author: "Christian Heyer"
 date: "`r Sys.Date()`"
@@ -37,15 +37,12 @@ disableWGCNAThreads()
 
 ```
 
-```{r}
-
-
-```
 
 ```{r}
 h5ad_path <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/merged/seurat/seurat_obj.rds.gz"
 #h5_seuratpath <- 
-  
+
+umap_coords <- 
   
 #seurat_path <- Convert(source = h5ad_path, dest = "")
 
@@ -96,7 +93,7 @@ ElbowPlot(adata)
 adata <- FindNeighbors(adata, dims = 1:15)
 adata <- FindClusters(adata, resolution = 0.5)
 #adata <- RunHarmony(adata, group.by.vars = "sample")
-adata <- RunUMAP(adata, dims = 1:15,reduction = "pca")
+#adata <- RunUMAP(adata, dims = 1:15,reduction = "pca")
 ```
 
 ```{r}
@@ -153,18 +150,22 @@ rm(seurat_obj)
 p1 | p2
 ```
 
-```{r}
+```{r, eval = FALSE}
+
+if (consensus)
 adata <- SetMultiExpr(
   adata,
   group_name = "immunec",
   group.by = "cell_type",
   multi.group.by ="sample",
-  multi_groups = NULL, assay =  # this parameter can be used to select a subset of groups in the multi.group.by column,
-  
-  
-)
+  multi_groups = NULL, assay =  # this parameter can be used to select a subset of groups in the multi.group.by column
+) else {
+adata <- SetDatExpr(  adata,
+  group_name = "immunec",
+  group.by = "cell_type")
+}
 
-consensus <- TRUE
+
 ```
 
 
@@ -186,14 +187,34 @@ if (consensus) {
   adata <- TestSoftPowersConsensus(adata)
 } else {
   adata <- TestSoftPowers(
-  adata,
-  networkType = 'signed' # you can also use "unsigned" or "signed hybrid"
+    adata,
+    networkType = 'signed' # you can also use "unsigned" or "signed hybrid"
   )
+  plot_list <- PlotSoftPowers(adata)
+  wrap_plots(plot_list, ncol=2)
+  
+   adata <- TestSoftPowers(
+    adata,
+    networkType = 'signed hybrid' # you can also use "unsigned" or "signed hybrid"
+  )
+  plot_list <- PlotSoftPowers(adata)
+  wrap_plots(plot_list, ncol=2)
+  
+    
+  adata <- TestSoftPowers(
+    adata,
+    networkType = 'unsigned' # you can also use "unsigned" or "signed hybrid"
+  )
+  plot_list <- PlotSoftPowers(adata)
+  wrap_plots(plot_list, ncol=2)
 }
 # plot the results:
 plot_list <- PlotSoftPowers(adata)
+wrap_plots(plot_list, ncol=2)
+```
 
 
+```{r, eval=FALSE}
 # get just the scale-free topology fit plot for each group
 consensus_groups <- unique(adata$sample)
 p_list <- lapply(1:length(consensus_groups), function(i){
@@ -203,7 +224,7 @@ p_list <- lapply(1:length(consensus_groups), function(i){
 
 
 # assemble with patchwork
-wrap_plots(p_list, ncol=2)
+wrap_plots(plot_list, ncol=2)
 
 power_table <- GetPowerTable(adata)
 head(power_table)
@@ -233,63 +254,118 @@ if (!file.exists("/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequenc
   saveRDS(adata, file = "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/hWCGNA_res.RDS.gz")
   })
 }
-adata <- readRDS("/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/hWCGNA_res.RDS.gz")
+
 ```
 
 
 ```{r}
 library(hdWGCNA)
-PlotDendrogram(adata, main='immunec')
+signed_networks <-"/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/hWCGNA_res_signed.RDS.gz"
+unsigned_networks <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/hWCGNA_res_unsigned.RDS.gz"
+
+downstream_analysis <- function(adata_path, main_title, group_by_vars, group_names, new_module_name) {
+  adata <- readRDS(adata_path)
+  
+  
+  adata <- ScaleData(adata, features=VariableFeatures(adata))
+  adata <- ModuleEigengenes(adata, group.by.vars = group_by_vars)
+  
+  hMEs <- GetMEs(adata)
+  MEs <- GetMEs(adata, harmonized=FALSE)
+  plot_list <- list()
+  for ( group_n in group_names) {
+    adata <- ModuleConnectivity(adata, group.by = 'cell_type', group_name = group_n)
+    adata <- ResetModuleNames(adata, new_name = paste0(new_module_name, "_", group_n))
+  
+    p <- PlotKMEs(adata, ncol=3,)
+    print(p)
+    plot_list[[group_n]] <- p 
+  }
+  modules <- GetModules(adata)
+  
+  return(list(adata_obj = adata, hMEs=hMEs, MEs=MEs, modules=modules, kme_plots = plot_list ))
+}
+disableWGCNAThreads() 
+signed_res <- downstream_analysis(signed_networks, "signed_network", group_by_vars = c("sample"), 
+                                  group_names = c("immunec", "devEC/proEC"),
+                                  new_module_name = "signed")
+
+
+PlotDendrogram(signed_res$adata_obj, main="signed_network") 
+signed_res$kme_plots$immunec
+
+```
+
+### unsigned network
+
+```{r}
+unsigned_res <- downstream_analysis(unsigned_networks, "unsigned_network", 
+                                   group_by_vars = c("sample"), 
+                                  group_names = c("immunec", "devEC/proEC"),
+                                  new_module_name = "unsigned")
+
+
 ```
 
 
 Here Batch correction via harmony runs on the Module Eigengenes to deal with batch effects
+
 ```{r}
-adata <- ScaleData(adata, features=VariableFeatures(adata))
-#adata@assays$counts <- NULL
-# compute all MEs in the full single-cell dataset
-
-#adata <- RunUMAP(adata, dims = 1:15)
-
-adata <- ModuleEigengenes(
- adata,
+library(dplyr)
+library(UCell)
+library(patchwork)
+library(SCpubr)
+run_analysis <- function(res_list) {
+  res_list$adata_obj -> adata
+  res_list$modules -> modules
+  # show the first 6 columns:
+  modules %>% dplyr::filter(gene_name == "Aplnr")
   
-)
+  hub_df <- GetHubGenes(adata, n_hubs = 20)
+  
+  adata <- ModuleExprScore(
+    adata,
+    n_genes = 25,
+    method='UCell'
+  )
+  
+  # make a featureplot of hMEs for each module
+  plot_list <- ModuleFeaturePlot(
+    adata,
+    features='hMEs', # plot the hMEs
+    order=TRUE # order so the points with highest hMEs are on top
+  )
+  
+  # stitch together with patchwork
+  wrap_plots(plot_list, ncol=2)
+  
+  plot_list <- ModuleFeaturePlot(
+    adata,
+    features='scores', # plot the hub gene scores
+    order='shuffle', # order so cells are shuffled
+    ucell = TRUE # depending on Seurat vs UCell for gene scoring
+  )
+  
+  wrap_plots(plot_list, ncol=2)
+  
+  SCpubr::do_DimPlot(adata,group.by = "sample")
+  SCpubr::do_DimPlot(adata,group.by = "cell_type")
+  SCpubr::do_FeaturePlot(adata,features = "Aplnr",order = TRUE)
+  
+  # get hMEs from seurat object
+  MEs <- GetMEs(adata, harmonized=FALSE)
+  mods <- colnames(MEs); mods <- mods[mods != 'grey']
+  
+  # add hMEs to Seurat meta-data:
+  adata@meta.data <- cbind(adata@meta.data, MEs)
+  SCpubr::do_FeaturePlot(adata,features = "ectest-M1",order = TRUE)
+  
+  return(adata)
+}
 
 ```
 
-
 ```{r}
-# harmonized module eigengenes:
-hMEs <- GetMEs(adata)
-
-# module eigengenes:
-MEs <- GetMEs(adata, harmonized=FALSE)
-```
-
-```{r}
-adata <- ModuleConnectivity(
-  adata,
-  group.by = 'cell_type'
-)
-
-adata <- ModuleConnectivity(
-  adata,
-  group.by = 'sample', group_name = 'Day7'
-)
-
-
-adata <- ResetModuleNames(
-  adata,
-  new_name = "ectest-M"
-)
-p <- PlotKMEs(adata, ncol=5)
-p
-```
-
-```{r}
-modules <- GetModules(adata)
-
 # show the first 6 columns:
 modules %>%dplyr::filter(gene_name == "Aplnr")
 ```

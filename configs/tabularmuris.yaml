@@ -24,3 +24,5 @@ cacoa_opts:
 is_raw: False
 use_anndataR: True
 use_seuratdisk: True
+
+filter:

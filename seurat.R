@@ -15,17 +15,19 @@ if (exists("snakemake")) {
   use_anndataR <- snakemake@params[['use_anndataR']]
   use_seuratdisk <- snakemake@params[['use_seuratdisk']]
   source("common.R")
+library(glue)
+
 } else {
   f_path <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/"
-  input_h5ad <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/TabularMuris/TabularMuris_update.h5ad"
-	input_file_counts <- file.path(f_path, "TabularMuris/TabularMuris_raw/X.csv")
-	input_file_metadata <- file.path(f_path, "TabularMuris/TabularMuris_raw/obs.csv")
-	input_file_genes <- file.path(f_path, "TabularMuris/TabularMuris_raw/var.csv")
-	seurat_temp <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/TabularMuris/TabularMuris_update.h5seurat"
-	f_type <- "h5ad"
-	#seurat_temp <- "TabularMuris_nonmyeloid_brain_raw/yeet.rds"
-	organism <- "mm"
-	p_name <- "testproject"
+  dataset_name <- "TabularMuris_counts"
+  input_h5ad <- glue::glue("{f_path}/{dataset_name}/{dataset_name}_update.h5ad")
+  input_file_counts <- file.path(f_path, glue::glue("{dataset_name}/{dataset_name}_raw/X.csv"))
+  input_file_metadata <- file.path(f_path, glue::glue("{dataset_name}/{dataset_name}_raw/obs.csv"))
+  input_file_genes <- file.path(f_path, glue::glue("{dataset_name}/{dataset_name}_raw/var.csv"))
+  seurat_temp <- glue::glue("{f_path}/{dataset_name}/{dataset_name}_update.h5seurat")
+  f_type <- "h5ad"
+  organism <- "mm"
+  p_name <- "testproject"
 }
 
 

@@ -17,15 +17,16 @@ if (exists("snakemake")) {
     xlsx_path <- snakemake@output[["cao_xlsx"]]
     threads <- snakemake@threads
     organism <- snakemake@config[["organism"]]
-
+    is_raw <- snakemake@config[["is_raw"]]
        
     
 } else {
     threads <- 2
     
-    base_fp = "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/TabularMuris/"
+    base_fp = "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/TabularMuris"
     cao_path <- file.path(base_fp, "cao_obj.RDS.gz")
     cao_output <- file.path(base_fp, "processed_cao.RDS.gz")
+    is_raw <- FALSE
 }
 #plan("multicore", workers = threads)
 #options(error=function() traceback(2))
@@ -33,7 +34,11 @@ if (exists("snakemake")) {
 cao <- readRDS(cao_path)
         
 cao$data.object<- FindNeighbors(cao$data.object,features = VariableFeatures(cao$data.object))
-cao$data.object@misc$graph.name <- "RNA_snn"
+if(is_raw) {
+    cao$data.object@misc$graph.name <- "SCT_snn"
+} else {
+    cao$data.object@misc$graph.name <- "RNA_snn"
+}
 cao$n.cores <- threads
 
 cao$estimateCellLoadings()
@@ -43,17 +48,17 @@ cao$estimateCellDensity()
 cao$estimateDiffCellDensity()
 #cao$estimateDiffCellDensity(type='permutation', verbose=FALSE, name='cell.density.kde')
 cao$estimateExpressionShiftMagnitudes(min.cells.per.sample = 5,top.n.genes = 1500, n.permutations = 2500)
-
+#cao$estimateExpressionShiftMagnitudes()
 
 
 cao$estimateClusterFreeDE()
 exc.genes <- cao$test.results$cluster.free.z %>%  colnames() %>%
   .[grepl("Mt-",x = ., ignore.case = TRUE)] %>% c("Malat1")
-cao$smoothClusterFreeZScores(n.top.genes=1000, excluded.genes=exc.genes)
+#cao$smoothClusterFreeZScores(n.top.genes=1000, excluded.genes=exc.genes)
 
-cao$estimateClusterFreeExpressionShifts(n.top.genes=1500, n.permutations = 2500)
+#cao$estimateClusterFreeExpressionShifts(n.top.genes=1500, n.permutations = 2500)
         
-cao$estimateGenePrograms(n.programs=10, n.top.genes = 1500)
+#cao$estimateGenePrograms(n.programs=10, n.top.genes = 1500)
 ## Estimate DE
 
 

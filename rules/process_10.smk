@@ -14,7 +14,7 @@ SAMPLES = config["samples"].keys()
 output_files=[]
 
 if config["build_lung_lps_report"]:
-    output_files.append(join(BASE_FP, DATASET, "merged", "report.html"))
+    output_files.append(join(BASE_FP, DATASET, "merged", "report", "report.html"))
 
 rule all:
     input:
@@ -254,6 +254,7 @@ rule select_variable_features:
             category="QC",
             subcategory="{sample}",
         ),
+        umap_coords = join(BASE_FP, DATASET, "{sample}", "anndata", "csvs", "umap_coords.csv")
     conda:
         "../envs/scanpy.yml"
     threads: 1
@@ -270,7 +271,8 @@ rule merge_samples:
             BASE_FP, DATASET, "{sample}", "anndata", "adata_with_dub.h5ad"
         ),sample = SAMPLES),
     output:
-        big_adata=join(BASE_FP, DATASET, "merged","anndata", "adata_merged.h5ad")
+        big_adata=join(BASE_FP, DATASET, "merged","anndata", "adata_merged.h5ad"),
+        umap_coords=join(BASE_FP, DATASET, "merged","anndata", "csvs", "umap_coords.csv"),
     conda: "../envs/scanpy.yml"
     params:
         batch_key="sample",
@@ -284,6 +286,7 @@ rule merge_samples:
 rule export_to_seurat:
     input:
         adata_processed = join(BASE_FP, DATASET, "merged", "anndata", "adata_processed.h5ad"),
+        umap_coords = join(BASE_FP, DATASET, "merged", "anndata", "csvs", "umap_coords.csv"),
     output:
         seurat_obj=join(BASE_FP, DATASET, "merged", "seurat", "seurat_obj.rds.gz")
     params:
@@ -338,7 +341,7 @@ rule export_report:
     input:
         report_ipynb=join(BASE_FP, DATASET, "merged", "report.ipynb"),
     output:
-        report_html=join(BASE_FP, DATASET, "merged", "report.html"),
+        report_html=join(BASE_FP, DATASET, "merged", "report", "report.html"),
     conda: "../envs/lunglps.yaml"
     threads: 1
     resources:
