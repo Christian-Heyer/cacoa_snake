@@ -25,8 +25,8 @@ def read_and_process_10x(mtx_file: str,
     # Hardcocded ensembl 93 as host -> make flexible
     annot = sc.queries.biomart_annotations(
         "mmusculus",
-        ["ensembl_gene_id", "external_gene_name"],
-        host="jul2018.archive.ensembl.org"
+        ["ensembl_gene_id", "external_gene_name"]
+#        host="jul2018.archive.ensembl.org"
     ).set_index("ensembl_gene_id")
 
     adata = adata.T
@@ -71,8 +71,8 @@ def read_and_process_10x(mtx_file: str,
         | is_outlier(adata, "pct_counts_in_top_20_genes", 5)
     )
     adata.obs.outlier.value_counts()
-    adata.obs["mt_outlier"] = is_outlier(adata, "pct_counts_mt", 3) | (
-        adata.obs["pct_counts_mt"] > 8
+    adata.obs["mt_outlier"] = is_outlier(adata, "pct_counts_mt", 4) | (
+        adata.obs["pct_counts_mt"] > 15
     )
     print(f"Total number of cells: {adata.n_obs}")
     adata = adata[(~adata.obs.outlier) & (~adata.obs.mt_outlier)].copy()

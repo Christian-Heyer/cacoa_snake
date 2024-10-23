@@ -327,6 +327,7 @@ rule create_lunglps_report:
         report_ipynb=join(BASE_FP, DATASET, "merged", "report.ipynb"),
         adata_processed = join(BASE_FP, DATASET, "merged", "anndata", "adata_processed.h5ad"),
     params:
+        plot_path = join(BASE_FP, DATASET, "merged", "plots"),
     conda: "../envs/lunglps.yaml" #"../envs/lunglps.yaml"
     threads: 8
     log:

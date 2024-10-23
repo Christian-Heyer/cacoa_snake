@@ -29,7 +29,7 @@ samples:
     barcodes_file: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472510_Day7_barcodes.tsv.gz"
     features_file: "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/GSM4472510_Day7_features.tsv.gz"
 
-    
+download_link: 
     
 external_metadata:  "data/Adam_meta_data_wo_outlier.txt"
 organism: "mm"

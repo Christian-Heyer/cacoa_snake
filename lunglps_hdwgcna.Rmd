@@ -1,4 +1,4 @@
-consensus <- FALSE---
+---
 title: "lunglps_hdWGCNA"
 author: "Christian Heyer"
 date: "`r Sys.Date()`"
@@ -6,8 +6,8 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-
+knitr::opts_chunk$set(echo = TRUE, fig.width = 8, fig.height = 8)
+consensus <- FALSE
 # single-cell analysis package
 library(Seurat)
 
@@ -15,8 +15,8 @@ library(Seurat)
 library(tidyverse)
 library(cowplot)
 library(patchwork)
-
-# co-expression network analysis packages:
+library(GeneOverlap)
+# co-expression network analysis packages:++
 library(WGCNA)
 library(hdWGCNA)
 # using the cowplot theme for ggplot
@@ -28,190 +28,10 @@ set.seed(12345)
 # optionally enable multithreading
 #enableWGCNAThreads(nThreads = 4)
 disableWGCNAThreads() 
+BPPARAM <- BiocParallel::SerialParam()
 ```
 
 ## Test hdWGCNA
-
-```{r}
-#install.packages(c("Seurat", "WGCNA", "igraph", "devtools", "GeneOverlap"))
-
-```
-
-
-```{r}
-h5ad_path <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/merged/seurat/seurat_obj.rds.gz"
-#h5_seuratpath <- 
-
-umap_coords <- 
-  
-#seurat_path <- Convert(source = h5ad_path, dest = "")
-
-adata <- readRDS(h5ad_path)
-
-adata@assays$counts <- NULL
-adata@assays$soupX_counts <- NULL 
-adata@assays$log1p_norm <- NULL
-```
-
-```{r}
-DefaultAssay(adata) <- "RNA"
-#adata@assays$scran_normalization@data[is.na(adata@assays$scran_normalization@data)] <- 0
-#adata@assays$scran_normalization@counts[is.na(adata@assays$scran_normalization@counts)] <- 0
-adata <- FindVariableFeatures(adata,assay = "RNA", selection.method = "vst", nfeatures = 4200)
-
-# Identify the 10 most highly variable genes
-top10 <- head(VariableFeatures(adata), 10)
-
-# plot variable features with and without labels
-plot1 <- VariableFeaturePlot(adata,selection.method = "vst")
-plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
-plot1 / plot2
-```
-
-```{r}
-all.genes <- rownames(adata)
-adata <- ScaleData(adata, features = all.genes)
-adata <- RunPCA(adata) #a, features = VariableFeatures(object = adata))
-
-print(adata[["pca"]], dims = 1:5, nfeatures = 5)
-
-VizDimLoadings(adata, dims = 1:2, reduction = "pca")
-```
-
-```{r}
-SCpubr::do_DimPlot(adata, reduction = "pca",group.by = "sample") 
-SCpubr::do_DimPlot(adata, reduction = "pca",group.by = "cell_type") 
-
-DimHeatmap(adata, dims = 1, cells = 500, balanced = TRUE)
-DimHeatmap(adata, dims = 1:15, cells = 500, balanced = TRUE)
-
-ElbowPlot(adata)
-```
-
-```{r}
-
-adata <- FindNeighbors(adata, dims = 1:15)
-adata <- FindClusters(adata, resolution = 0.5)
-#adata <- RunHarmony(adata, group.by.vars = "sample")
-#adata <- RunUMAP(adata, dims = 1:15,reduction = "pca")
-```
-
-```{r}
-adata$cell_type[is.na(adata$cell_type)] <- "other"
-SCpubr::do_DimPlot(adata,group.by = "sample")
-SCpubr::do_DimPlot(adata,group.by = "cell_type")
-
-SCpubr::do_DimPlot(adata, group.by = "seurat_clusters")
-```
-
-
-```{r}
-adata <- SetupForWGCNA(
-  adata,
-  gene_select = "variable", # the gene selection approach
-  fraction = 0.05, # fraction of cells that a gene needs to be expressed in order to be included
-  wgcna_name = "lunglps" # the name of the hdWGCNA experiment
-)
-
-# construct metacells  in each group
-adata <- MetacellsByGroups(
-  seurat_obj = adata,
-  group.by = c("cell_type", "sample"), # specify the columns in seurat_obj@meta.data to group by
-  reduction = 'pca', # select the dimensionality reduction to perform KNN on
-  k = 25, # nearest-neighbors parameter
-  max_shared = 10, # maximum number of shared cells between two metacells
-  ident.group = 'sample'# set the Idents of the metacell seurat object
-)
-
-# normalize metacell expression matrix:
-adata <- NormalizeMetacells(adata)
-
-```
-
-## Check MEta cells
-
-We check the low dimensional representation of the metacells to check how well they represent the dataset
-
-```{r}
-seurat_obj <- adata
-metacell_obj <- GetMetacellObject(seurat_obj)
-
-seurat_obj <- ScaleMetacells(seurat_obj, features=VariableFeatures(seurat_obj))
-seurat_obj <- RunPCAMetacells(seurat_obj, features=VariableFeatures(seurat_obj))
-seurat_obj <- RunHarmonyMetacells(seurat_obj, group.by.vars='sample')
-seurat_obj <- RunUMAPMetacells(seurat_obj, reduction='harmony', dims=1:15)
-
-
-p1 <- DimPlotMetacells(seurat_obj, group.by='cell_type') + umap_theme() + ggtitle("Cell Type")
-p2 <- DimPlotMetacells(seurat_obj, group.by='sample') + umap_theme() + ggtitle("Sample")
-
-rm(seurat_obj)
-
-p1 | p2
-```
-
-```{r, eval = FALSE}
-
-if (consensus)
-adata <- SetMultiExpr(
-  adata,
-  group_name = "immunec",
-  group.by = "cell_type",
-  multi.group.by ="sample",
-  multi_groups = NULL, assay =  # this parameter can be used to select a subset of groups in the multi.group.by column
-) else {
-adata <- SetDatExpr(  adata,
-  group_name = "immunec",
-  group.by = "cell_type")
-}
-
-
-```
-
-
-```{r}
-#adata <- SetDatExpr(
-#  adata,
-#  group_name = c("immunec", "devEC/proEC"), # the name of the group of interest in the group.by column
-#  group.by='cell_type', # the metadata column containing the cell type info. This same column should have also been used in #MetacellsByGroups
-#  assay = 'RNA', # using RNA assay
-#  slot = 'data' # using normalized data,
-  
-#)
-
-```
-
-```{r}
-# Test different soft powers:
-if (consensus) {
-  adata <- TestSoftPowersConsensus(adata)
-} else {
-  adata <- TestSoftPowers(
-    adata,
-    networkType = 'signed' # you can also use "unsigned" or "signed hybrid"
-  )
-  plot_list <- PlotSoftPowers(adata)
-  wrap_plots(plot_list, ncol=2)
-  
-   adata <- TestSoftPowers(
-    adata,
-    networkType = 'signed hybrid' # you can also use "unsigned" or "signed hybrid"
-  )
-  plot_list <- PlotSoftPowers(adata)
-  wrap_plots(plot_list, ncol=2)
-  
-    
-  adata <- TestSoftPowers(
-    adata,
-    networkType = 'unsigned' # you can also use "unsigned" or "signed hybrid"
-  )
-  plot_list <- PlotSoftPowers(adata)
-  wrap_plots(plot_list, ncol=2)
-}
-# plot the results:
-plot_list <- PlotSoftPowers(adata)
-wrap_plots(plot_list, ncol=2)
-```
 
 
 ```{r, eval=FALSE}
@@ -232,17 +52,44 @@ head(power_table)
 pow <- c(5,5,4,6,6,6)
 ```
 
+```{r run_single, eval = FALSE}
+# file.remove("/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/hWCGNA_res.RDS.gz")
+library(bsub)
+bsub_opt$call_Rscript = function(version) {
+  GetoptLong::qq("module load gcc/11.1.0; module load curl/7.77.0; module load java/1.8.0_131; module load R/@{version}; Rscript")
+}
+if (!file.exists(glue::glue("/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/hWCGNA_res_{net_type}.RDS.gz"))) {
+  WGCNA_image <- "/omics/groups/OE0436/internal/heyer/temp/hdWGCNA_image.RData"
+  save.image(WGCNA_image)
+  bsub_chunk( name = "test_hdWGCNA", hours = 2, memory = 64, cores = 16,packages = c("hdWGCNA", "WGCNA", "Seurat"),
+              R_version = "4.4.0",image = "/omics/groups/OE0436/internal/heyer/temp/hdWGCNA_image.RData", sh_head = "cd /omics/groups/OE0436/internal/heyer/projects/scRNAseq_scripts",
+   #           working_dir = '/omics/groups/OE0436/internal/heyer/projects/scRNAseq_scripts',
+              code = {
+  #renv::activate(project = "/omics/groups/OE0436/internal/heyer/projects/scRNAseq_scripts")
+
+  enableWGCNAThreads(nThreads = 16)
+  adata <- ConstructNetwork(
+  adata,  networkType = net_type, TOMType = net_type,
+  setDatExpr=FALSE, tom_outdir = "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/data",
+  consensus = FALSE,
+  tom_name = 'immunec_signed', saveConsensusTOMs = TRUE, overwrite_tom = TRUE # name of the topoligical overlap matrix written to disk
+  )
+  saveRDS(adata, file = glue::glue("/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/hWCGNA_res_{net_type}.RDS.gz"))
+  })
+}
+
+```
 
 
-```{r}
+```{r run_consensus, eval = FALSE}
 # file.remove("/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/hWCGNA_res.RDS.gz")
 library(bsub)
 if (!file.exists("/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/hWCGNA_res.RDS.gz")) {
   WGCNA_image <- "/omics/groups/OE0436/internal/heyer/temp/hdWGCNA_image.RData"
   save.image(WGCNA_image)
   bsub_chunk( name = "test hdWGCNA", packages = c("Seurat", "hdWGCNA", "WGCNA"),hours = 2, memory = 64, cores = 16, 
-              R_version = "4.2.0",image = "/omics/groups/OE0436/internal/heyer/temp/hdWGCNA_image.RData", 
-              working_dir = '/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps',
+              R_version = "4.4.0",image = "/omics/groups/OE0436/internal/heyer/temp/hdWGCNA_image.RData", 
+              working_dir = '/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps', 
               code = {
   enableWGCNAThreads(nThreads = 16)
   adata <- ConstructNetwork(
@@ -258,10 +105,15 @@ if (!file.exists("/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequenc
 ```
 
 
+## Signed Netowrk analysis
+
+
+
 ```{r}
 library(hdWGCNA)
 signed_networks <-"/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/hWCGNA_res_signed.RDS.gz"
 unsigned_networks <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/lung_lps/hWCGNA_res_unsigned.RDS.gz"
+
 
 downstream_analysis <- function(adata_path, main_title, group_by_vars, group_names, new_module_name) {
   adata <- readRDS(adata_path)
@@ -271,7 +123,7 @@ downstream_analysis <- function(adata_path, main_title, group_by_vars, group_nam
   adata <- ModuleEigengenes(adata, group.by.vars = group_by_vars)
   
   hMEs <- GetMEs(adata)
-  MEs <- GetMEs(adata, harmonized=FALSE)
+  MEs <- GetMEs(adata, harmonized=FALSE,wgcna_name = "lunglps")
   plot_list <- list()
   for ( group_n in group_names) {
     adata <- ModuleConnectivity(adata, group.by = 'cell_type', group_name = group_n)
@@ -287,12 +139,12 @@ downstream_analysis <- function(adata_path, main_title, group_by_vars, group_nam
 }
 disableWGCNAThreads() 
 signed_res <- downstream_analysis(signed_networks, "signed_network", group_by_vars = c("sample"), 
-                                  group_names = c("immunec", "devEC/proEC"),
+                                  group_names = c("EC"),
                                   new_module_name = "signed")
 
 
 PlotDendrogram(signed_res$adata_obj, main="signed_network") 
-signed_res$kme_plots$immunec
+signed_res$kme_plots$EC
 
 ```
 
@@ -301,14 +153,14 @@ signed_res$kme_plots$immunec
 ```{r}
 unsigned_res <- downstream_analysis(unsigned_networks, "unsigned_network", 
                                    group_by_vars = c("sample"), 
-                                  group_names = c("immunec", "devEC/proEC"),
+                                  group_names = c("EC"),
                                   new_module_name = "unsigned")
 
+PlotDendrogram(unsigned_res$adata_obj, main="unsigned_network") 
 
 ```
 
-
-Here Batch correction via harmony runs on the Module Eigengenes to deal with batch effects
+### Signed Network downstream analysis
 
 ```{r}
 library(dplyr)
@@ -319,6 +171,7 @@ run_analysis <- function(res_list) {
   res_list$adata_obj -> adata
   res_list$modules -> modules
   # show the first 6 columns:
+  
   modules %>% dplyr::filter(gene_name == "Aplnr")
   
   hub_df <- GetHubGenes(adata, n_hubs = 20)
@@ -331,26 +184,27 @@ run_analysis <- function(res_list) {
   
   # make a featureplot of hMEs for each module
   plot_list <- ModuleFeaturePlot(
-    adata,
+    adata, reduction = "UMAP",
     features='hMEs', # plot the hMEs
     order=TRUE # order so the points with highest hMEs are on top
   )
   
   # stitch together with patchwork
-  wrap_plots(plot_list, ncol=2)
+  wrap_plots(plot_list, ncol=2) %>% print()
   
   plot_list <- ModuleFeaturePlot(
     adata,
+    reduction = "UMAP",
     features='scores', # plot the hub gene scores
     order='shuffle', # order so cells are shuffled
     ucell = TRUE # depending on Seurat vs UCell for gene scoring
   )
   
-  wrap_plots(plot_list, ncol=2)
+  wrap_plots(plot_list, ncol=2) %>% print()
   
-  SCpubr::do_DimPlot(adata,group.by = "sample")
-  SCpubr::do_DimPlot(adata,group.by = "cell_type")
-  SCpubr::do_FeaturePlot(adata,features = "Aplnr",order = TRUE)
+  SCpubr::do_DimPlot(adata,reduction = "UMAP",group.by = "sample")
+  SCpubr::do_DimPlot(adata,reduction = "UMAP",group.by = "cell_type")
+  SCpubr::do_FeaturePlot(adata,reduction = "UMAP",features = "Aplnr",order = TRUE)
   
   # get hMEs from seurat object
   MEs <- GetMEs(adata, harmonized=FALSE)
@@ -358,110 +212,48 @@ run_analysis <- function(res_list) {
   
   # add hMEs to Seurat meta-data:
   adata@meta.data <- cbind(adata@meta.data, MEs)
-  SCpubr::do_FeaturePlot(adata,features = "ectest-M1",order = TRUE)
+  #SCpubr::do_FeaturePlot(adata,reduction = "UMAP",features = "signed_EC1",order = TRUE)
   
   return(adata)
 }
 
+signed_res$adata_obj <- run_analysis(signed_res)
+
+SCpubr::do_FeaturePlot(signed_res$adata_obj,reduction = "UMAP",features = "signed_EC1",order = TRUE)
+SCpubr::do_FeaturePlot(signed_res$adata_obj,reduction = "UMAP",features = "Aplnr",order = TRUE)
+
+p <- Seurat::FeatureScatter(signed_res$adata_obj, "Aplnr", "signed_EC1",group.by = "sample",plot.cor = T)
+p
 ```
+
+### Unsigned network downstream analysis 
 
 ```{r}
-# show the first 6 columns:
-modules %>%dplyr::filter(gene_name == "Aplnr")
+unsigned_res$adata_obj <- run_analysis(unsigned_res)
 ```
 
-
-```{r}
-hub_df <- GetHubGenes(adata, n_hubs = 20)
-
-hub_df
-```
-
-
-```{r}
-library(UCell)
-adata <- ModuleExprScore(
-  adata,
-  n_genes = 25,
-  method='UCell'
-)
-```
-
-```{r doplots}
-# make a featureplot of hMEs for each module
-plot_list <- ModuleFeaturePlot(
-  adata,
-  features='hMEs', # plot the hMEs
-  order=TRUE # order so the points with highest hMEs are on top
-)
-library(patchwork)
-# stitch together with patchwork
-wrap_plots(plot_list, ncol=2)
-```
-
-```{r}
-plot_list <- ModuleFeaturePlot(
-  adata,
-  features='scores', # plot the hub gene scores
-  order='shuffle', # order so cells are shuffled
-  ucell = TRUE # depending on Seurat vs UCell for gene scoring
-)
-
-wrap_plots(plot_list, ncol=2)
-
-SCpubr::do_DimPlot(adata,group.by = "sample")
-SCpubr::do_DimPlot(adata,group.by = "cell_type")
-SCpubr::do_FeaturePlot(adata,features = "Aplnr",order = TRUE)
-
-```
+### Signed overview
 
 
 ```{r}
-# get hMEs from seurat object
-MEs <- GetMEs(adata, harmonized=FALSE)
-mods <- colnames(MEs); mods <- mods[mods != 'grey']
-
-# add hMEs to Seurat meta-data:
-adata@meta.data <- cbind(adata@meta.data, MEs)
-SCpubr::do_FeaturePlot(adata,features = "ectest-M1",order = TRUE)
-```
-
-```{r}
+adata <- signed_res$adata_obj
 # Plot INH-M4 hME using Seurat VlnPlot function
-p <- VlnPlot(
+
+ME_names <- glue::glue("signed_EC{1:(ncol(adata@misc$lunglps$MEs) -1)}")
+p <- SCpubr::do_ViolinPlot(
   adata,
-  features = 'ectest-M1',
+  features = ME_names,
   group.by = 'sample',
-  pt.size = 0 # don't show actual data points
+  pt.size = 0, legend.position = "none" # don't show actual data points
 )
 
-# add box-and-whisker plots on top:
-p <- p + geom_boxplot(width=.25, fill='white')
-
-# change axis labels and remove legend:
-p <- p + xlab('') + ylab('hME') + NoLegend()
 
 # plot output
 p
 ```
-```{r}
-# Plot INH-M4 hME using Seurat VlnPlot function
-p <- VlnPlot(
-  adata,
-  features = 'ectest-M2',
-  group.by = 'sample',
-  pt.size = 0 # don't show actual data points
-)
 
-# add box-and-whisker plots on top:
-p <- p + geom_boxplot(width=.25, fill='white')
 
-# change axis labels and remove legend:
-p <- p + xlab('') + ylab('hME') + NoLegend()
 
-# plot output
-p
-```
 ```{r}
 ModuleCorrelogram(adata)
 ```
@@ -493,49 +285,36 @@ p
 ```
 
 
+### Unsigned overview
+
+```{r}
+#adata <- unsigned_res$adata_obj
+# Plot INH-M4 hME using Seurat VlnPlot function
+
+ME_names <- glue::glue("unsigned_EC{1:(ncol(adata@misc$lunglps$MEs) -1)}")
+p <- SCpubr::do_ViolinPlot(
+   unsigned_res$adata_obj,
+  features = ME_names,
+  group.by = 'sample',
+  pt.size = 0, legend.position = "none" # don't show actual data points
+)
+
+
+# plot output
+p
 ### Module trait correlations
+```
+
+
 
 ```{r}
-
-# convert sex to factor
-#adata$msex <- as.factor(adata$msex)
-
-# convert age_death to numeric
-
-
-# list of traits to correlate
-cur_traits <- c('nCount_RNA', 'nFeature_RNA', 'total_counts_mt')
-
-adata <- ModuleTraitCorrelation(
-  adata,
-  traits = cur_traits,
-  group.by='cell_type'
+HubGeneNetworkPlot(
+  signed_res$adata_obj,
+  n_hubs = 5, n_other=10,
+  edge_prop = 0.75,
+  mods = 'all'
 )
 ```
-
-
-```{r}
-mt_cor <- GetModuleTraitCorrelation(adata)
-
-
-```
-
-```{r}
-PlotModuleTraitCorrelation(
-  adata,
-  label = 'fdr',
-  label_symbol = 'stars',
-  text_size = 2,
-  text_digits = 2,
-  text_color = 'white',
-  high_color = 'yellow',
-  mid_color = 'black',
-  low_color = 'purple',
-  plot_max = 0.2,
-  combine=TRUE
-)
-```
-
 
 
 ```{r}
@@ -545,30 +324,113 @@ seurat_obj <- adata
 seurat_obj <- SetActiveWGCNA(seurat_obj, 'lunglps')
 
 # compute eigengenes and connectivity
-seurat_obj <- ModuleEigengenes(seurat_obj)
-seurat_obj <- ModuleConnectivity(seurat_obj, group_name ='immunec', group.by='cell_type')
+#seurat_obj <- ModuleEigengenes(seurat_obj)
+#seurat_obj <- ModuleConnectivity(seurat_obj, group_name ='EC', group.by='cell_type')
 
 # visualize network with semi-supervised UMAP
 seurat_obj <- RunModuleUMAP(
   seurat_obj,
-  n_hubs = 5,
-  n_neighbors=5,
-  min_dist=0.1,
-  spread=2,
-  wgcna_name = 'lunglps',
-  target_weight=0.05,
-  supervised=TRUE,
+  n_hubs = 10, # number of hub genes to include for the UMAP embedding
+  n_neighbors=15, # neighbors parameter for UMAP
+  min_dist=0.1 # min distance between points in UMAP space
 )
 
 ModuleUMAPPlot(
   seurat_obj,
-  edge.alpha=0.5,
+  edge.alpha=0.25,
   sample_edges=TRUE,
-  keep_grey_edges=FALSE,
-  edge_prop=0.075,
-  label_hubs=0
+  edge_prop=0.1, # proportion of edges to sample (20% here)
+  label_hubs=2 ,# how many hub genes to plot per module?
+  keep_grey_edges=FALSE
+
 )
 
 ```
 
+```{r enrichments, fig.width = 10}
+library(enrichR)
+# enrichr databases to test
+dbs <- c('GO_Biological_Process_2023','GO_Cellular_Component_2023','GO_Molecular_Function_2023')
+
+# perform enrichment tests
+seurat_obj <- RunEnrichr(
+  seurat_obj,
+  dbs=dbs, # character vector of enrichr databases to test
+  max_genes = Inf, # number of genes per module to test. use max_genes = Inf to choose all genes!,
+  wgcna_name = "lunglps"
+)
+
+# retrieve the output table
+enrich_df <- GetEnrichrTable(seurat_obj)
+EnrichrBarPlot(
+   seurat_obj,
+  mods = "signed_EC1", # use all modules (this is the default behavior)
+  database = "GO_Biological_Process_2023", # this has to be one of the lists we used above!!!
+ n_terms= 10 # number of terms for each module
+)
+p <- EnrichrDotPlot(
+   seurat_obj,
+  mods = "all", # use all modules (this is the default behavior)
+  database = "GO_Biological_Process_2023", # this has to be one of the lists we used above!!!
+ n_terms= 3 # number of terms for each module
+)
+p
+```
+
+```{r}
+# compute cell-type marker genes with Seurat:
+Idents(seurat_obj) <- paste0(seurat_obj$sample, "_", seurat_obj$cell_type)
+markers <- Seurat::FindAllMarkers(
+  seurat_obj,
+  only.pos = TRUE,
+  logfc.threshold=1
+)
+
+# compute marker gene overlaps
+overlap_df <- OverlapModulesDEGs(
+  seurat_obj,
+  deg_df = markers,
+  fc_cutoff = 1 # log fold change cutoff for overlap analysis
+)
+
+plot_list <- OverlapBarPlot(overlap_df)
+
+# stitch plots with patchwork
+wrap_plots(plot_list[names(plot_list) %>% str_ends("EC")], ncol=3)
+wrap_plots(plot_list[names(plot_list) %>% str_ends("Aerocyte")], ncol=3)
+```
+
+```{r}
+OverlapDotPlot(
+  overlap_df,
+  plot_var = 'odds_ratio') +
+  ggtitle('Overlap of modules & cell-type markers')
+```
+
+```{r}
+dbs <- c("MSigDB_Hallmark_2020")
+# perform enrichment tests
+seurat_obj <- RunEnrichr(
+  seurat_obj,
+  dbs=dbs, # character vector of enrichr databases to test
+  max_genes = Inf, # number of genes per module to test. use max_genes = Inf to choose all genes!,
+  wgcna_name = "lunglps"
+)
+
+# retrieve the output table
+enrich_df <- GetEnrichrTable(seurat_obj)
+EnrichrBarPlot(
+   seurat_obj,
+  mods = "signed_EC1", # use all modules (this is the default behavior)
+  database = "", # this has to be one of the lists we used above!!!
+ n_terms= 10 # number of terms for each module
+)
+p <- EnrichrDotPlot(
+   seurat_obj,
+  mods = "all", # use all modules (this is the default behavior)
+  database = "MSigDB_Hallmark_2020", # this has to be one of the lists we used above!!!
+ n_terms= 3 # number of terms for each module
+)
+p
+```
 

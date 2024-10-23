@@ -421,6 +421,7 @@ ego_result_senescence <- furrr::future_map(module_list_signed, function(i){
 
 
 
+
 ```
 
 ```{r}
@@ -433,7 +434,7 @@ top_enrich_go <- lapply(top_enrich_clusters, function(i) ego_result_signed[[i]]@
 for(i in 1:length(top_enrich_go)){
   print(top_enrich_go[[i]][, c('Description', 'GeneRatio', 'p.adjust')])
   cat('\n')
-  p <- dotplot(ego_result_signed[[i]]) + ggtitle(paste0("signature ", i)) 
+  p <- dotplot(ego_result_signed[[top_enrich_clusters[i]]]) + ggtitle(paste0("signature ",top_enrich_clusters[i] )) 
   print(p)  
 }
 ```
@@ -468,8 +469,29 @@ if (nrow(ego_result_signed[[which(aplnr_res)]]@result ) > 0) {
 }
 
 module_list_signed[[which(aplnr_res)]]
-```
 
+
+
+```
+```{r}
+
+gene <- "Aplnr"
+
+aplnr_res <- purrr::map_lgl(module_list_unsigned, function(x) gene %in% x)
+
+which(aplnr_res)
+
+ego_result_unsigned[aplnr_res] 
+
+if (nrow(ego_result_unsigned[[which(aplnr_res)]]@result ) > 0) {
+  clusterProfiler::dotplot(ego_result_unsigned[[which(aplnr_res)]])
+}
+
+module_list_unsigned[[which(aplnr_res)]]
+
+
+
+```
 
 ### Aplnr Correlations
 
@@ -478,6 +500,9 @@ module_list_signed[[which(aplnr_res)]]
 adata_small <- Seurat::AddModuleScore(adata_small, features = module_list_signed,assay = "log1p_norm", name = "CSCORE_signed")
 
 adata_small <- Seurat::AddModuleScore(adata_small, features = module_list_unsigned,assay = "log1p_norm", name = "CSCORE_unsigned")
+
+# Assuming 'sample' is a column in 'adata' data frame
+adata_small$sample <- forcats::fct_relevel(adata_small$sample, "basal", "Hour6")
 ```
 
 ```{r}
@@ -526,8 +551,9 @@ aplnr_cor <- CSCORE_result$est[, "Aplnr"]
 sort(aplnr_cor, decreasing = T) -> sorted_aplnr_cor
 aplnr_tb <- tibble(names(aplnr_cor), aplnr_cor)
 #mat <- as.matrix(data@assays$RNA@data)
-sample_acts <- run_mlm(mat=aplnr_tb, network =net, .source='source', .target='target',
-                  .mor='weight', minsize = 5)
+#net <- msigdbr::msigdbr(species = "Mus musculus", category = "H") %>% dplyr::select(gs_name, gene_symbol)
+#sample_acts <- run_mlm(mat=aplnr_tb, network =net, .source='source', .target='target',
+#                  .mor='weight', minsize = 5)
 plot(density(aplnr_cor))
 
 ```
@@ -536,7 +562,7 @@ Show the list of genes that are highly correlated and anticorrleated with Aplnr
 
 ```{r}
 aplnr_tb %>% arrange(desc(aplnr_cor)) %>% head(30)
-aplnr_tb %>% arrange(aplnr_cor) %>% head(10)
+aplnr_tb %>% arrange(aplnr_cor) %>% head(30)
 ```
 
 
@@ -554,10 +580,87 @@ msigdb %>% as_tibble() %>% select(gs_name, gene_symbol) -> msigdb_tb
 colnames(msigdb_tb) <- c("source", "target")
 EC_senes <- RNAscripts::senes
 
+```
 
+```{r}
+ego_result_msig_signed <- furrr::future_map(module_list_signed, function(i){
+  enricher(gene = i,
+         TERM2GENE = msigdb_tb,
+         pvalueCutoff = 0.05,
+         pAdjustMethod = "BH",
+         qvalueCutoff = 0.05,
+         minGSSize = 5,
+         maxGSSize = 500,
+         universe = universe,
+       )
+  }
+)
+
+ego_result_msig_unsigned <- furrr::future_map(module_list_unsigned, function(i){
+  enricher(gene = i,
+         TERM2GENE = msigdb_tb,
+         pvalueCutoff = 0.05,
+         pAdjustMethod = "BH",
+         qvalueCutoff = 0.05,
+         minGSSize = 5,
+         maxGSSize = 500,
+         universe = universe,
+       )
+  }
+)
+
+```
+
+#### Signed MSigdbr
+
+```{r}
+
+gene <- "Aplnr"
+
+aplnr_res <- purrr::map_lgl(module_list_signed, function(x) gene %in% x)
+
+which(aplnr_res)
+
+ego_result_msig_signed[aplnr_res] 
+
+if (nrow(ego_result_msig_signed[[which(aplnr_res)]]@result ) > 0) {
+  clusterProfiler::dotplot(ego_result_msig_signed[[which(aplnr_res)]])
+}
+
+module_list_signed[[which(aplnr_res)]]
+
+
+
+```
+
+### Unsigned MSIGDB
+
+```{r}
+
+gene <- "Aplnr"
+
+aplnr_res <- purrr::map_lgl(module_list_unsigned, function(x) gene %in% x)
+
+which(aplnr_res)
+
+module_list_unsigned[aplnr_res] 
+
+if (nrow(ego_result_msig_unsigned[[which(aplnr_res)]] ) > 0) {
+  clusterProfiler::dotplot(ego_result_msig_unsigned[[which(aplnr_res)]])
+}
+
+module_list_unsigned[[which(aplnr_res)]]
+
+
+
+```
+
+
+```{r}
 
 decoupleR::run_fgsea(as.matrix(aplnr_cor), EC_senes)
-decoupleR::run_fgsea(as.matrix(aplnr_cor), distinct(msigdb_tb))
+yoted <- decoupleR::run_fgsea(as.matrix(aplnr_cor), distinct(msigdb_tb)) %>% dplyr::filter(statistic == "norm_fgsea") %>%
+  dplyr::mutate(padjust = p.adjust(p_value, method = "BH")) %>% dplyr::filter(padjust < 0.05)
 
 # Get the gene sets
 msig_enrich <- RNAscripts::run_msig_enricher(gset_list = list(aplnr_tb), 
@@ -568,7 +671,7 @@ enrich_obj <- clusterProfiler::GSEA(sort(aplnr_cor, decreasing = T),TERM2GENE = 
 
 ```
 
-```{r, fig.height = 16, fig.width=12}
+```{r, fig.height = 8, fig.width=6}
  RNAscripts::better_dotplot(msig_enrich[[1]], c_groups = c("corr", "AntiCor"))
 
 ```
@@ -610,12 +713,21 @@ mat_consensus <- tri_test %>%
     as.matrix()
 
 # color palette blue,white,red
-pheatmap::pheatmap(mat_consensus, cluster_rows = T, cluster_cols = F, color = colorRampPalette(c("blue", "white", "red"))(100))
+pheatmap::pheatmap(mat_consensus[order(mat_consensus, decreasing = T),,drop =F], cluster_rows = F, cluster_cols = F, color = colorRampPalette(c("blue", "white", "red"))(100))
 ```
 
 
 ```{r}
 
 enrich_obj <- clusterProfiler::GSEA(sort(aplnr_cor, decreasing = T),TERM2GENE = EC_senes)
+enrich_obj@result
+```
+
+```{r}
+msigdb_tb %>% dplyr::filter(source == "HALLMARK_OXIDATIVE_PHOSPHORYLATION") %>% mutate(presence = target %in% aplnr_tb$`names(aplnr_cor)`) %>% pull(presence) %>% table(dnn="HALLMARK_OXIDATIVE_PHOSPHORYLATION")
+msigdb_tb %>% dplyr::filter(source == "HALLMARK_CHOLESTEROL_HOMEOSTASIS") %>% mutate(presence = target %in% aplnr_tb$`names(aplnr_cor)`) %>% pull(presence) %>% table(dnn="HALLMARK_CHOLESTEROL_HOMEOSTASIS")
+
+msigdb_tb %>% dplyr::filter(source == "HALLMARK_FATTY_ACID_METABOLISM") %>% mutate(presence = target %in% aplnr_tb$`names(aplnr_cor)`) %>% pull(presence) %>% table(dnn=c("HALLMARK_FATTY_ACID_METABOLISM"))
 
 ```
+
