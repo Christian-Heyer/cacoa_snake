@@ -1,4 +1,4 @@
-processSeurat <- function(s_obj, is_raw = FALSE) {
+processSeurat <- function(s_obj, is_raw = FALSE, run_umap = TRUE) {
   seurat_obj <- UpdateSeuratObject(seurat_obj)
 
 
@@ -8,12 +8,14 @@ processSeurat <- function(s_obj, is_raw = FALSE) {
     seurat_obj <- ScaleData(seurat_obj, do.scale = T)
   }
   # Filter genes expressed in less than 20 cells
-
-  seurat_obj <- FindVariableFeatures(object = seurat_obj, nfeatures = 2000, selection.method = "vst")
-  seurat_obj <- RunPCA(seurat_obj, npcs = 15) 
-  features = VariableFeatures(object = seurat_obj)
-  seurat_obj <- FindNeighbors(seurat_obj, reduction = "pca", dims = 1:15,k.param = 20)
-  seurat_obj <- RunUMAP(seurat_obj, min.dist = 0.5, spread = 1, dims=1:15, n.neighbors = 20)
-
+  
+  
+  seurat_obj <- FindVariableFeatures(object = seurat_obj, nfeatures = 2000)
+  if (run_umap) {
+    seurat_obj <- RunPCA(seurat_obj, npcs = 15)
+    features <- VariableFeatures(object = seurat_obj)
+    seurat_obj <- FindNeighbors(seurat_obj, reduction = "pca", dims = 1:15, k.param = 20)
+    seurat_obj <- RunUMAP(seurat_obj, min.dist = 0.5, spread = 1, dims = 1:15, n.neighbors = 20)
+  }
   seurat_obj
 }

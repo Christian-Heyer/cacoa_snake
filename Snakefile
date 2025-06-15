@@ -32,12 +32,13 @@ if config["download_link"]["f_type"] == "h5ad":
             h5ad = join(BASE_FP, "{dataset}", "{dataset}_raw." + config["download_link"]["f_type"])
         output:
             #temp(dir(join(BASE_FP, "{dataset}", "{dataset}_raw"))), 
-            counts = join(BASE_FP, "{dataset}", "{dataset}_raw", "X.csv"),
-            cell_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "obs.csv"),
-            gene_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "var.csv"),
+ #           counts = join(BASE_FP, "{dataset}", "{dataset}_raw", "X.csv"),
+ #           cell_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "obs.csv"),
+ #           gene_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "var.csv"),
             h5ad = join(BASE_FP, "{dataset}", "{dataset}_update." + config["download_link"]["f_type"])
         params:
-            out_dir = join(BASE_FP, "{dataset}", "{dataset}_raw")
+            out_dir = join(BASE_FP, "{dataset}", "{dataset}_raw"),
+            obs_filter = config["obs_filter"]
         resources:
             time_min=59,
             mem_mb=2048*16
@@ -48,9 +49,9 @@ if config["download_link"]["f_type"] == "h5ad":
         
     rule create_seurat_and_process:
         input:
-            counts = join(BASE_FP, "{dataset}", "{dataset}_raw", "X.csv"),
-            cell_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "obs.csv"),
-            gene_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "var.csv"),
+           # counts = join(BASE_FP, "{dataset}", "{dataset}_raw", "X.csv"),
+           # cell_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "obs.csv"),
+           # gene_metadata = join(BASE_FP, "{dataset}", "{dataset}_raw", "var.csv"),
             h5ad = join(BASE_FP, "{dataset}", "{dataset}_update." + config["download_link"]["f_type"])
         output:
             seurat_temp  =  temp(join(BASE_FP, "{dataset}", "{dataset}_update.h5seurat")), 
@@ -59,11 +60,13 @@ if config["download_link"]["f_type"] == "h5ad":
             f_type = config["download_link"]["f_type"],
             use_anndataR = config["use_anndataR"],
             use_seuratdisk = config["use_seuratdisk"],
+            run_umap = config["run_umap"],
+            sample_cells = config["sample_cells"],
         conda:  
             "envs/seurat.yml"
         resources:
-            time_min=59,
-            mem_mb = 96000
+            mem_mb=128000,
+            time_min=120
         threads: 8
         script:
             "seurat.R"
@@ -118,11 +121,11 @@ rule run_cacoa_analysis:
         cao_xlsx = join(BASE_FP, "{dataset}", "report", "{dataset}" + "_de_res.xlsx")
     conda:
         "envs/cacoa.yml"
-    threads: 16
+    threads: 8
     resources:
-        mem_mb = 170000,
+        mem_mb = 199000,
         time_min = "04:59",
-        queue = "long"
+        queue = "long-debian"
     log:
         "logs/run_cacoa/{dataset}_run_cacoa.log"
     script:
@@ -144,7 +147,8 @@ rule plot_report:
         notebook=join(BASE_FP, "{dataset}", "report", "{dataset}" + "_cacoa.r.ipynb")
     resources:
         mem_mb = 192000,
-        walltime = "09:59" 
+        walltime = "09:59",
+	queue="long-debian"
     threads: 4
     notebook:
         "cacoa_report.r.ipynb"

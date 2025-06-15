@@ -27,5 +27,10 @@ colors:
 is_raw: False
 use_anndataR: True
 use_seuratdisk: True
-
+run_umap: True
 filter:
+obs_filter:
+  method: 
+sample_cells: False
+
+default_layer: "counts"

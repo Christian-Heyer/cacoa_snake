@@ -12,7 +12,7 @@ library(DESeq2)
 library(Seurat)
 library(magrittr)
 library(ggplot2)
-library(tidyverse)
+#library(tidyverse)
 library(ggsignif)
 library(patchwork)
 if (exists("snakemake")) {
@@ -22,15 +22,16 @@ if (exists("snakemake")) {
 } else {
     threads <- 2
 
-      base_fp = "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/TabularMuris/"
+      base_fp = "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/LungAtlas/"
     cao_path <- file.path(base_fp, "cao_obj.RDS.gz")
     cao_output <- file.path(base_fp, "processed_cao.RDS.gz")
       group_colors <- list( young = "#FC8D59",
       aged = "#A0A0A4")
-      plot_dir <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/TabularMuris/plots"
+      plot_dir <- "/omics/odcf/analysis/OE0228_projects/VascularAging/rna_sequencing/public_scrnaseq/LungAtlas/plots"
   if(!dir.exists(plot_dir)) {
     dir.create(plot_dir)
   }
+  org_name <- "hs"
 }
 
 cao_obj <- readRDS(cao_output)
@@ -60,7 +61,10 @@ names(biggus_yeetus) <- cell_types
 You can also embed plots, for example:
 
 ```{r pressure, echo=FALSE, fig.width = 8, fig.cap="Boxplot of normalized counts from deseq2 normalized pseudobulk of cell types comparing young and aged samples. P-values shown are BH adjusted p-values calculated using DESeq2 on the pseudobulked data"}
+
+
 plot_gene_bar <- function(deseq_obj, gene_id, cell_type) {
+  gene_id<- ifelse(org_name == "hs", str_to_upper(gene_id), gene_id)
   plot_data <- DESeq2::plotCounts(deseq_obj, normalized = T,gene = gene_id,intgroup = "group",returnData = T) %>%
       dplyr::filter(!is.na(group)) %>% mutate(group = fct_relevel(group, "young"))
     gene_pval <-results(deseq_obj)[gene_id,]$padj
@@ -77,13 +81,13 @@ all_plots <- list()
 for(c_g in cell_types) {
   yeet <- biggus_yeetus[[c_g]]
   plots <- list()
-  if ("Aplnr" %in% rownames(yeet)) {
+  if ("Aplnr" %in% rownames(yeet) |"APLNR" %in% rownames(yeet) ) {
     plots[["aplnr"]] <- plot_gene_bar(yeet, "Aplnr", c_g)
   }
-  if("Apln" %in% rownames(yeet)) {
+  if("Apln" %in% rownames(yeet) | "APLN" %in% rownames(yeet) ) {
     plots[["apln"]] <- plot_gene_bar(yeet, "Apln", c_g) 
   }
-  if("Cd74" %in% rownames(yeet)) {
+  if("Cd74" %in% rownames(yeet) | "CD74" %in% rownames(yeet)) {
     plots[["cd74"]] <- plot_gene_bar(yeet, "Cd74", c_g)
   }
   wrap_plots(plots,ncol = 3) %>% plot()
@@ -103,6 +107,7 @@ Note that the `echo = FALSE` parameter was added to the code chunk to prevent pr
 
 ```{r, eval = F}
 calculate_pc_expression <- function(group_id, group_name, seurat_obj, feature = "Aplnr") {
+  feature <- ifelse(org_name == "hs", str_to_upper(feature), feature)
   data_mat <- seurat_obj[,seurat_obj@meta.data[,group_name] == group_id]@assays[[seurat_obj@active.assay]]@data
   which(data_mat[feature,] > 0 ) %>% length() /nrow(data_mat)
 }
@@ -134,25 +139,25 @@ pct_expression_per_group <- function(seurat_obj, feature, split.by = NULL, group
 
 ```
 
-```{r}
+```{r, eval = FALSE}
 sample <- cao_obj$data.object
 sample$cell <- NULL
-p <- SCpubr::do_BoxPlot(sample = sample[,sample@meta.data$cell_ontology_class == "endothelial cell"],
-feature = "Aplnr", group.by = "binary_age",assay = "RNA",use_test = T,comparisons = list(c("old","young")))
+p <- SCpubr::do_BoxPlot(sample = sample[,sample@meta.data$ann_level_1 == "Endothelial"],
+feature = "APLNR", group.by = "binary_age",assay = "RNA")#,use_test = T,comparisons = list(c("aged","young")))
 ggsave("aplnr_boxplot.svg",p,  path = plot_dir, width =7, height = 8)
 p
 ```
 
 ```{r, fig.cap = "percentage expression of Aplnr across cell types comparing young and aged samples" }
-DotPlot(sample, features = "Aplnr",split.by = "binary_age") -> yeetus
+DotPlot(sample, features = "APLNR",split.by = "binary_age") -> yeetus
 yeetus$data -> pct_expression_data
 pct_expression_data$age <- str_extract(pct_expression_data$id,"[a-zA-Z]*$")
 pct_expression <- ggplot(pct_expression_data, aes(x = id, y = pct.exp, fill = age)) + geom_col() +
-  scale_x_discrete(guide = guide_axis(angle = 90)) + scale_fill_manual(values = c("old" = "#A0A0A4",
+  scale_x_discrete(guide = guide_axis(angle = 90)) + scale_fill_manual(values = c("aged" = "#A0A0A4",
                                                                                   "young" = "#FC8D59"),
-                                                                       labels = c("old" = "aged",
+                                                                       labels = c("aged" = "aged",
                                                                                   "young"= "young"),
-                                                                       breaks=c("young", "old")) +
+                                                                       breaks=c("young", "aged")) +
   theme_bw() + ylab("Aplnr pct.exp")
 
 ggsave(filename = "pct_expression_aplnr.svg",pct_expression, path = plot_dir, width =7, height = 8)
@@ -182,7 +187,7 @@ run_gsea_cao <- function(cao) {
     tibble(gene = obj$res$Gene,
            scores = obj$res$stat) %>% dplyr::arrange(desc(scores)) 
   })
-  RNAscripts::run_msig_enricher(gsea_data, category = "H")
+  RNAscripts::run_msig_enricher(gsea_data, category = "H",)
 }
 gsea_res <- run_gsea_cao(cao_obj)
 ```
@@ -377,3 +382,52 @@ acts <- run_ora(mat, network = senescence,.source='geneset', .target='genesymbol
 
 
 ```
+
+
+### Cell type Plots
+
+```{r, fig.width =10}
+#cell_type_markers
+marker_genes <- c("Ager", "Apln", "Aplnr" ,"Calca", "Ccr2", "Cd14", "Cd19", "Cd200r3", "Cd24a", "Cd3e", "Cd68", "Cd79a", "Cd8a", "Col1a1", "Csf1r", "Cx3cr1", "Cxcr4", "Epcam", "Foxj1",
+                  "H2-Aa", "Itgam", "Itgax", "Klrb1c", "Krt5", "Ly6c2", "Marco", "Mrc1", "Pdpn", "Pecam1", "Ptprc", "Resp18", "Scgb1a1", "Scgb3a2", "Sftpb", "Wnt3a")
+
+DefaultAssay(object = seurat_obj)  <- "RNA"
+p <- SCpubr::do_DotPlot(seurat_obj,features = marker_genes, group.by = "cell_ontology_class", cluster = TRUE)
+ggsave("paper_rev/markergenes.svg",p,width = 10)
+p
+```
+
+#### Glmmseq Plots
+
+```{r}
+pray_to_jesus <- readRDS("/omics/groups/OE0436/internal/heyer/glmmseq_result.RDS.gz")
+
+eval_seq <- function(glmmseq_obj) {
+    stats <- summary(glmmseq_obj)+
+    cat("\n \n")
+    cat("### Pvalues \n")
+ #   hist(glmmseq_obj@stats$pvals[,])
+   # apply(glmmseq_obj@stats$pvals, 2, hist) 
+    
+    cat("\n \n")
+    cat("### glmmseq Qval Res \n")
+    glmmseq_obj<- glmmSeq::glmmQvals(glmmseq_obj,cutoff = 0.01)
+
+  #  hist(glmmseq_obj@stats$qvals[,])
+    x <- apply(glmmseq_obj@stats$pvals,2, p.adjust, method = "BH")
+    
+   # hist(x)
+    glmmseq_obj
+}
+glmmseq_norm_counts <- eval_seq(pray_to_jesus$norm_counts)
+groups_to_test <- c("age" = "ageaged",
+                        "EC_status" = "EC_statustumor",
+                        "Aplnr_KO" = "Aplnr_KOKO",
+                        "Apln_treatment" = "Apln_treatmentup",
+                        "age:EC_status" = "ageaged:EC_statustumor",
+                        "EC_status:Aplnr_KO" = "EC_statustumor:Aplnr_KOKO",
+                        "age:Apln_treatment" = "ageaged:Apln_treatmentup")
+
+
+```
+

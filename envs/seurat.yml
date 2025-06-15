@@ -3,16 +3,16 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
-  - r
   - r-seurat
   - r-reticulate
   - r-devtools
   - r-vroom
   - r-readr
   - bioconductor-geoquery
-  - r-matrix=1.6-1
+  - r-matrix
   - bioconductor-rhdf5
   - bioconductor-singlecellexperiment
+  - bioconductor-glmgampoi
   - r-seuratobject
   - r-cli
   - r-crayon
